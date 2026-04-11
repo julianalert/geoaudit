@@ -124,7 +124,7 @@ export default function Home() {
         <p
           className="fade"
           style={{
-            fontFamily: "'Syne', sans-serif",
+            fontFamily: "'Space Grotesk', sans-serif",
             fontSize: "clamp(32px, 5vw, 52px)",
             fontWeight: 800,
             letterSpacing: "-1.5px",

@@ -240,7 +240,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
         </div>
         <h1
           style={{
-            fontFamily: "'Syne', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
+            fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
             fontWeight: 800, letterSpacing: "-1px", color: "#f0f4ff", lineHeight: 1.1, marginBottom: 8,
           }}
         >
@@ -329,7 +329,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.6 }}>✗</div>
       <h2
         style={{
-          fontFamily: "'Syne', sans-serif", fontSize: 22,
+          fontFamily: "'Space Grotesk', sans-serif", fontSize: 22,
           fontWeight: 800, color: "#f87171", marginBottom: 10,
         }}
       >
@@ -388,7 +388,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
 
         <h1
           style={{
-            fontFamily: "'Syne', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
+            fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
             fontWeight: 800, letterSpacing: "-1px", color: "#f0f4ff", lineHeight: 1.1, marginBottom: 8,
           }}
         >
@@ -428,7 +428,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
             </div>
             <div
               style={{
-                fontFamily: "'Syne', sans-serif", fontSize: "clamp(22px, 3vw, 34px)",
+                fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(22px, 3vw, 34px)",
                 fontWeight: 800, color: verdictColor, lineHeight: 1.05,
                 letterSpacing: "-0.5px", marginBottom: 10,
               }}
@@ -678,12 +678,12 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                     <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#6b7a99", marginBottom: 8 }}>{m.model}</div>
                     {m.listed ? (
                       <>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
+                        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
                         <div style={{ fontSize: 11, color: "#6b7a99", marginTop: 4 }}>of 5 listed</div>
                       </>
                     ) : (
                       <>
-                        <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>—</div>
+                        <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>—</div>
                         <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
                       </>
                     )}
@@ -730,7 +730,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
               </svg>
 
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
                 Are you showing up when buyers search for your category?
               </div>
 
@@ -877,7 +877,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
               </svg>
 
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
                 How does your brand stack up against competitors in AI?
               </div>
 
@@ -1004,7 +1004,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
               </svg>
 
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
                 Where do LLMs get their information about you?
               </div>
 
@@ -1109,7 +1109,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
               </svg>
 
-              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
                 Know what to fix. Know when to fix it.
               </div>
 
@@ -1186,7 +1186,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
             </div>
             <div
               style={{
-                fontFamily: "'Syne', sans-serif",
+                fontFamily: "'Space Grotesk', sans-serif",
                 fontSize: "clamp(22px, 3.5vw, 32px)",
                 fontWeight: 800, letterSpacing: "-0.5px",
                 color: "#f0f4ff", lineHeight: 1.1,
