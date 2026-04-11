@@ -1,16 +1,32 @@
 export const metadata = {
-  title: 'FREE GEO AUDIT TOOL',
-  description: 'Do LLM Models know your brand? Find out with our free audit tool.',
-}
+  title: "GEO Audit 101 — LLM Visibility Audit Tool",
+  description:
+    "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask.",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, padding: 0 }}>{children}</body>
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body
+        style={{
+          margin: 0,
+          padding: 0,
+          background: "#0a0a0f",
+          fontFamily: "'Inter', system-ui, sans-serif",
+        }}
+      >
+        {children}
+      </body>
     </html>
-  )
+  );
 }
