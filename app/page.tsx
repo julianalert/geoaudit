@@ -133,8 +133,8 @@ export default function Home() {
             marginBottom: 16,
           }}
         >
-          ARE YOU SHOWING UP
-          <span style={{ color: "#3b82f6" }}> IN AI ANSWERS? </span>
+          ARE YOU <span style={{ color: "#3b82f6" }}> SHOWING UP </span>
+           IN AI ANSWERS? 
         </p>
 
         {/* Subheading */}

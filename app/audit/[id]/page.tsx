@@ -569,6 +569,45 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
         </Card>
       </div>
 
+      {/* Mid-report CTA */}
+      <div
+        className="fade"
+        style={{
+          position: "relative", overflow: "hidden",
+          padding: "28px 32px", marginBottom: 28,
+          background: "linear-gradient(135deg, #0f0f1a 0%, #0a0f18 100%)",
+          border: "1px solid #3b82f630",
+          borderRadius: 12,
+          boxShadow: "0 0 40px #3b82f610, inset 0 1px 0 #3b82f618",
+        }}
+      >
+        <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "radial-gradient(circle, #3b82f618 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 20 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#3b82f6", marginBottom: 10 }}>
+              LLM VISIBILITY = CUSTOMERS YOU&apos;RE NOT REACHING YET.
+            </div>
+            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 800, color: "#f0f4ff", letterSpacing: "-0.3px", lineHeight: 1.2 }}>
+              Book a free 15-min call and leave with a prioritized action plan.
+            </div>
+          </div>
+          <button
+            onClick={() => window.open("https://calendly.com/not-another-marketer/free-ai-growth-audit-call", "_blank")}
+            style={{
+              background: "#3b82f6", color: "#fff", border: "none",
+              padding: "13px 28px", fontFamily: "'Space Mono', monospace",
+              fontSize: 12, fontWeight: 700, letterSpacing: "1.2px",
+              cursor: "pointer", borderRadius: 6, whiteSpace: "nowrap", flexShrink: 0,
+              transition: "transform 0.15s, box-shadow 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px #3b82f650"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+          >
+            BOOK A FREE CALL →
+          </button>
+        </div>
+      </div>
+
       {/* Card 2: Brand Positioning */}
       {d.positioning && (
         <div className="fade" style={{ marginBottom: 28 }}>
@@ -1192,19 +1231,18 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 color: "#f0f4ff", lineHeight: 1.1,
               }}
             >
-              Want to know exactly what
+              If AI doesn&apos;t know you,
               <br />
-              to do with{" "}
-              <span style={{ color: "#3b82f6" }}>these results?</span>
+              <span style={{ color: "#3b82f6" }}>your customers won&apos;t either.</span>
             </div>
             <div style={{ fontSize: 14, color: "#6b7a99", lineHeight: 1.6 }}>
-              Book a free 15-min call. We&apos;ll walk through your audit live, identify your biggest gaps, and map out what to fix first.
+              Book a free 15-min call and leave with a prioritized action plan to fix your LLM visibility.
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
               <button
                 onClick={() => window.open("https://calendly.com/not-another-marketer/free-ai-growth-audit-call", "_blank")}
                 style={{
-                  background: "#3b82f6", color: "#0a0a0f", border: "none",
+                  background: "#3b82f6", color: "#fff", border: "none",
                   padding: "16px 36px", fontFamily: "'Space Mono', monospace",
                   fontSize: 13, fontWeight: 700, letterSpacing: "1.5px",
                   cursor: "pointer", borderRadius: 6, whiteSpace: "nowrap",
@@ -1216,7 +1254,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                 BOOK A FREE STRATEGY CALL →
               </button>
               <div style={{ fontSize: 11, color: "#3a4060", fontFamily: "'Space Mono', monospace", letterSpacing: "0.05em" }}>
-                by notanothermarketer.com
+                No pitch. Just strategy.
               </div>
             </div>
           </div>
