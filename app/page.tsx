@@ -58,7 +58,7 @@ export default function Home() {
           right: 0,
           height: "1px",
           background:
-            "linear-gradient(90deg, transparent, #00ff8715, transparent)",
+            "linear-gradient(90deg, transparent, #3b82f615, transparent)",
           animation: "scanline 10s linear infinite",
           pointerEvents: "none",
           zIndex: 1,
@@ -71,7 +71,7 @@ export default function Home() {
           inset: 0,
           opacity: 0.025,
           backgroundImage:
-            "linear-gradient(#00ff87 1px, transparent 1px), linear-gradient(90deg, #00ff87 1px, transparent 1px)",
+            "linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px)",
           backgroundSize: "48px 48px",
           pointerEvents: "none",
         }}
@@ -100,9 +100,9 @@ export default function Home() {
             style={{
               width: 7,
               height: 7,
-              background: "#00ff87",
+              background: "#3b82f6",
               borderRadius: "50%",
-              boxShadow: "0 0 8px #00ff87",
+              boxShadow: "0 0 8px #3b82f6",
               animation: "pulse-dot 2.5s ease infinite",
             }}
           />
@@ -134,7 +134,7 @@ export default function Home() {
           }}
         >
           ARE YOU SHOWING UP
-          <span style={{ color: "#00ff87" }}> IN AI ANSWERS? </span>
+          <span style={{ color: "#3b82f6" }}> IN AI ANSWERS? </span>
         </p>
 
         {/* Subheading */}
@@ -193,7 +193,7 @@ export default function Home() {
                   transition: "border-color 0.2s",
                 }}
                 onFocus={(e) =>
-                  (e.currentTarget.style.borderColor = "#00ff8780")
+                  (e.currentTarget.style.borderColor = "#3b82f680")
                 }
                 onBlur={(e) =>
                   (e.currentTarget.style.borderColor = "#2a2a40")
@@ -231,7 +231,7 @@ export default function Home() {
                   transition: "border-color 0.2s",
                 }}
                 onFocus={(e) =>
-                  (e.currentTarget.style.borderColor = "#00ff8780")
+                  (e.currentTarget.style.borderColor = "#3b82f680")
                 }
                 onBlur={(e) =>
                   (e.currentTarget.style.borderColor = "#2a2a40")
@@ -270,7 +270,7 @@ export default function Home() {
                 borderRadius: 6,
                 transition: "border-color 0.2s",
               }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = "#00ff8780")}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#3b82f680")}
               onBlur={(e) => (e.currentTarget.style.borderColor = "#2a2a40")}
             />
           </div>
@@ -279,7 +279,7 @@ export default function Home() {
             onClick={handleSubmit}
             disabled={loading || !brand.trim() || !category.trim() || !websiteUrl.trim()}
             style={{
-              background: loading ? "#1e1e30" : "#00ff87",
+              background: loading ? "#1e1e30" : "#3b82f6",
               color: loading ? "#6b7a99" : "#0a0a0f",
               border: "none",
               padding: "14px 36px",
@@ -295,7 +295,7 @@ export default function Home() {
             onMouseEnter={(e) => {
               if (!loading) {
                 e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740";
+                e.currentTarget.style.boxShadow = "0 6px 24px #3b82f640";
               }
             }}
             onMouseLeave={(e) => {
@@ -330,7 +330,7 @@ export default function Home() {
                 gap: 6,
               }}
             >
-              <span style={{ color: "#00ff87", fontSize: 11 }}>✓</span>
+              <span style={{ color: "#3b82f6", fontSize: 11 }}>✓</span>
               <span
                 style={{
                   fontFamily: "'Space Mono', monospace",

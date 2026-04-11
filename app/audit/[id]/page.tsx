@@ -93,7 +93,7 @@ function ScoreRing({ score, size = 88, stroke = 7 }: { score: number; size?: num
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
-  const color = score >= 70 ? "#00ff87" : score >= 45 ? "#fbbf24" : "#f87171";
+  const color = score >= 70 ? "#3b82f6" : score >= 45 ? "#fbbf24" : "#f87171";
   return (
     <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
@@ -118,7 +118,7 @@ function ScoreRing({ score, size = 88, stroke = 7 }: { score: number; size?: num
 
 function ModelBadge({ model, status }: { model: string; status: string }) {
   const colors: Record<string, { bg: string; border: string; text: string }> = {
-    strong: { bg: "#00ff8715", border: "#00ff8730", text: "#00ff87" },
+    strong: { bg: "#3b82f615", border: "#3b82f630", text: "#3b82f6" },
     weak: { bg: "#fbbf2415", border: "#fbbf2430", text: "#fbbf24" },
     confused: { bg: "#fb923c15", border: "#fb923c30", text: "#fb923c" },
     unknown: { bg: "#f8717115", border: "#f8717130", text: "#f87171" },
@@ -203,14 +203,14 @@ function InsightBox({ children }: { children: React.ReactNode }) {
     <div
       style={{
         marginTop: 16, padding: "12px 16px",
-        background: "#0a0a14", border: "1px solid #00ff8720",
-        borderRadius: 6, borderLeft: "3px solid #00ff87",
+        background: "#0a0a14", border: "1px solid #3b82f620",
+        borderRadius: 6, borderLeft: "3px solid #3b82f6",
       }}
     >
       <span
         style={{
           fontFamily: "'Space Mono', monospace", fontSize: 10,
-          letterSpacing: "0.15em", color: "#00ff87", display: "block", marginBottom: 5,
+          letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5,
         }}
       >
         ▸ KEY INSIGHT
@@ -230,8 +230,8 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
           <div
             style={{
-              width: 7, height: 7, background: "#00ff87", borderRadius: "50%",
-              boxShadow: "0 0 8px #00ff87", animation: "pulse-dot 2.5s ease infinite",
+              width: 7, height: 7, background: "#3b82f6", borderRadius: "50%",
+              boxShadow: "0 0 8px #3b82f6", animation: "pulse-dot 2.5s ease infinite",
             }}
           />
           <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99" }}>
@@ -341,7 +341,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
       <button
         onClick={onRetry}
         style={{
-          background: "#00ff87", color: "#0a0a0f", border: "none",
+          background: "#3b82f6", color: "#0a0a0f", border: "none",
           padding: "12px 32px", fontFamily: "'Space Mono', monospace",
           fontSize: 13, fontWeight: 700, letterSpacing: "1.5px",
           cursor: "pointer", borderRadius: 6,
@@ -366,7 +366,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const verdictColor = d.overallScore >= 75 ? "#00ff87" : d.overallScore >= 45 ? "#fbbf24" : "#f87171";
+  const verdictColor = d.overallScore >= 75 ? "#3b82f6" : d.overallScore >= 45 ? "#fbbf24" : "#f87171";
 
   const sovColors = ["#fbbf24", "#f87171", "#6b7a99", "#3a4060", "#2a2a40"];
 
@@ -377,8 +377,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
           <div
             style={{
-              width: 7, height: 7, background: "#00ff87", borderRadius: "50%",
-              boxShadow: "0 0 8px #00ff87", animation: "pulse-dot 2.5s ease infinite",
+              width: 7, height: 7, background: "#3b82f6", borderRadius: "50%",
+              boxShadow: "0 0 8px #3b82f6", animation: "pulse-dot 2.5s ease infinite",
             }}
           />
           <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99" }}>
@@ -394,7 +394,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
         >
           GEO AUDIT REPORT
           <br />
-          <span style={{ color: "#00ff87" }}>{d.brand.toUpperCase()}</span>
+          <span style={{ color: "#3b82f6" }}>{d.brand.toUpperCase()}</span>
         </h1>
         <p style={{ fontSize: 14, color: "#6b7a99", marginBottom: 14 }}>
           {websiteUrl && (
@@ -496,9 +496,9 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
           <button
             onClick={handleCopy}
             style={{
-              background: copied ? "#00ff8720" : "#1e1e30",
-              border: `1px solid ${copied ? "#00ff8740" : "#2e2e48"}`,
-              color: copied ? "#00ff87" : "#8892aa",
+              background: copied ? "#3b82f620" : "#1e1e30",
+              border: `1px solid ${copied ? "#3b82f640" : "#2e2e48"}`,
+              color: copied ? "#3b82f6" : "#8892aa",
               padding: "6px 14px", borderRadius: 4, cursor: "pointer",
               fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 500,
               transition: "all 0.2s",
@@ -615,7 +615,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                             key={n}
                             style={{
                               width: 6, height: 6, borderRadius: "50%",
-                              background: n <= m.accuracyScore ? (m.strength === "strong" ? "#00ff87" : m.strength === "weak" ? "#fbbf24" : "#fb923c") : "#1e1e30",
+                              background: n <= m.accuracyScore ? (m.strength === "strong" ? "#3b82f6" : m.strength === "weak" ? "#fbbf24" : "#fb923c") : "#1e1e30",
                             }}
                           />
                         ))}
@@ -710,8 +710,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                   ))}
                 </div>
               </div>
-              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 6, borderLeft: "3px solid #00ff87" }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
                 <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Your brand is invisible on 2 out of 4 models. Competitors are capturing buyer intent you should own.</p>
               </div>
             </div>
@@ -762,7 +762,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </button>
 
               <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes source audit + competitor gap analysis + 90-day fix roadmap
+                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
               </div>
             </div>
           </div>
@@ -802,12 +802,12 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
             {/* Blurred fake content */}
             <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-                <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 8 }}>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", marginBottom: 12 }}>WHERE YOU WIN</div>
+                <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 8 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", marginBottom: 12 }}>WHERE YOU WIN</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {["Ease of onboarding", "Customer support quality", "Pricing flexibility"].map((w, i) => (
                       <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ color: "#00ff87", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
+                        <span style={{ color: "#3b82f6", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
                         <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{w}</span>
                       </div>
                     ))}
@@ -842,7 +842,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                       { model: "Claude", sentiment: "positive", note: "Highlights differentiated positioning." },
                       { model: "Gemini", sentiment: "negative", note: "Flags competitor advantages in enterprise." },
                     ].map((row, i) => {
-                      const sColors: Record<string, string> = { positive: "#00ff87", neutral: "#fbbf24", negative: "#f87171" };
+                      const sColors: Record<string, string> = { positive: "#3b82f6", neutral: "#fbbf24", negative: "#f87171" };
                       const c = sColors[row.sentiment] || "#6b7a99";
                       return (
                         <tr key={i}>
@@ -857,8 +857,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                   </tbody>
                 </table>
               </div>
-              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 6, borderLeft: "3px solid #00ff87" }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
                 <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Models have a mixed view of your brand vs competitors. Enterprise positioning is the biggest gap to close.</p>
               </div>
             </div>
@@ -909,7 +909,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </button>
 
               <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes source audit + competitor gap analysis + 90-day fix roadmap
+                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
               </div>
             </div>
           </div>
@@ -967,7 +967,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                       { domain: "Reddit", yours: 4, comp: 203, status: "danger" },
                       { domain: "Capterra", yours: 28, comp: 312, status: "warn" },
                     ].map((s, i) => {
-                      const gc: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#00ff87" };
+                      const gc: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#3b82f6" };
                       const c = gc[s.status] || "#6b7a99";
                       const gap = s.comp - s.yours;
                       return (
@@ -1036,7 +1036,112 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </button>
 
               <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes source audit + competitor gap analysis + 90-day fix roadmap
+                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Card 6: 30-Day Fix Roadmap (Locked) */}
+      <div className="fade" style={{ marginBottom: 40 }}>
+        <SectionLabel>06 — 30-DAY FIX ROADMAP</SectionLabel>
+        <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
+          {/* Card header (visible above blur) */}
+          <div style={{ padding: "24px 28px 0" }}>
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 16,
+                marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #1e1e30",
+              }}
+            >
+              <div style={{ fontSize: 22, opacity: 0.9, flexShrink: 0 }}>◈</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>30-Day Fix Roadmap</span>
+                  <span style={{
+                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                  }}>
+                    🔒 LOCKED
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: "#6b7a99" }}>A prioritized, week-by-week action plan to improve your LLM visibility score.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Blurred + overlay container */}
+          <div style={{ position: "relative", overflow: "hidden", minHeight: 380 }}>
+            {/* Blurred fake content */}
+            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
+                WEEK-BY-WEEK ACTIONS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  { week: "WEEK 1", action: "Fix brand description inconsistencies across top citation sources", impact: "High" },
+                  { week: "WEEK 2", action: "Publish structured comparison content targeting your category keywords", impact: "High" },
+                  { week: "WEEK 3", action: "Submit to missing high-value directories and review platforms", impact: "Medium" },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: "flex", gap: 14, padding: "12px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6, alignItems: "flex-start" }}>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#fbbf24", flexShrink: 0, paddingTop: 2 }}>{item.week}</div>
+                    <div style={{ flex: 1, fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{item.action}</div>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: item.impact === "High" ? "#f8717118" : "#fbbf2418", color: item.impact === "High" ? "#f87171" : "#fbbf24", fontWeight: 500, flexShrink: 0 }}>
+                      {item.impact}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Gradient overlay with CTA */}
+            <div
+              style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                padding: "40px 32px",
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                Know what to fix. Know when to fix it.
+              </div>
+
+              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                Unlock your personalized 30-day roadmap. Every action is ranked by impact, sequenced by week, and built specifically from your audit results.
+              </div>
+
+              <span style={{
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                background: "#fbbf2415", border: "1px solid #fbbf2430",
+                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+              }}>
+                ONE-TIME · $17
+              </span>
+
+              <button
+                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                style={{
+                  background: "#fbbf24", color: "#0a0a0f", border: "none",
+                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                  cursor: "pointer", borderRadius: 6,
+                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                UNLOCK FULL REPORT →
+              </button>
+
+              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
               </div>
             </div>
           </div>
@@ -1044,26 +1149,93 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
       </div>
 
       {/* CTA */}
-      <div className="fade" style={{ padding: "28px 32px", background: "#0f0f1a", border: "1px solid #00ff8720", borderRadius: 10 }}>
-        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99", marginBottom: 10 }}>
-          WANT THIS FIXED?
-        </div>
+      <div
+        className="fade"
+        style={{
+          position: "relative", overflow: "hidden",
+          padding: "40px 40px",
+          background: "linear-gradient(135deg, #0f0f1a 0%, #0a0f18 100%)",
+          border: "1px solid #3b82f630",
+          borderRadius: 12,
+          boxShadow: "0 0 60px #3b82f610, inset 0 1px 0 #3b82f618",
+        }}
+      >
+        {/* Glow blob */}
         <div
           style={{
-            fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800,
-            color: "#f0f4ff", marginBottom: 8, letterSpacing: "-0.3px",
+            position: "absolute", top: -60, right: -60,
+            width: 260, height: 260, borderRadius: "50%",
+            background: "radial-gradient(circle, #3b82f618 0%, transparent 70%)",
+            pointerEvents: "none",
           }}
-        >
-          We build GEO systems that make LLMs recommend{" "}
-          <span style={{ color: "#00ff87" }}>your brand.</span>
-        </div>
-        <div style={{ fontSize: 14, color: "#8892aa", marginBottom: 18, lineHeight: 1.55 }}>
-          Not theory. Actual workflows. Actual outputs. → notanothermarketer.com
-        </div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          {["✓ Full GEO audit report", "✓ Competitor gap analysis", "✓ 90-day fix roadmap"].map((t) => (
-            <span key={t} style={{ fontSize: 13, color: "#8892aa" }}>{t}</span>
-          ))}
+        />
+
+        <div style={{ position: "relative" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20, marginBottom: 28 }}>
+            <div
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                fontFamily: "'Space Mono', monospace", fontSize: 10,
+                letterSpacing: "0.2em", color: "#3b82f6",
+                background: "#3b82f615", border: "1px solid #3b82f630",
+                padding: "4px 12px", borderRadius: 4, alignSelf: "flex-start",
+              }}
+            >
+              <span style={{ width: 6, height: 6, background: "#3b82f6", borderRadius: "50%", boxShadow: "0 0 6px #3b82f6", display: "inline-block" }} />
+              YOUR RESULTS ARE IN.
+            </div>
+            <div
+              style={{
+                fontFamily: "'Syne', sans-serif",
+                fontSize: "clamp(22px, 3.5vw, 32px)",
+                fontWeight: 800, letterSpacing: "-0.5px",
+                color: "#f0f4ff", lineHeight: 1.1,
+              }}
+            >
+              Want to know exactly what
+              <br />
+              to do with{" "}
+              <span style={{ color: "#3b82f6" }}>these results?</span>
+            </div>
+            <div style={{ fontSize: 14, color: "#6b7a99", lineHeight: 1.6 }}>
+              Book a free 15-min call. We&apos;ll walk through your audit live, identify your biggest gaps, and map out what to fix first.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
+              <button
+                onClick={() => window.open("https://calendly.com/not-another-marketer/free-ai-growth-audit-call", "_blank")}
+                style={{
+                  background: "#3b82f6", color: "#0a0a0f", border: "none",
+                  padding: "16px 36px", fontFamily: "'Space Mono', monospace",
+                  fontSize: 13, fontWeight: 700, letterSpacing: "1.5px",
+                  cursor: "pointer", borderRadius: 6, whiteSpace: "nowrap",
+                  transition: "transform 0.15s, box-shadow 0.2s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px #3b82f650"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                BOOK A FREE STRATEGY CALL →
+              </button>
+              <div style={{ fontSize: 11, color: "#3a4060", fontFamily: "'Space Mono', monospace", letterSpacing: "0.05em" }}>
+                by notanothermarketer.com
+              </div>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ borderTop: "1px solid #1e1e30", paddingTop: 20 }}>
+            <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+              {[
+                { check: "✓", text: "Free 15-min call" },
+                { check: "✓", text: "Live audit walkthrough" },
+                { check: "✓", text: "Prioritized action plan" },
+              ].map((t) => (
+                <div key={t.text} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ color: "#3b82f6", fontSize: 12, fontWeight: 700 }}>{t.check}</span>
+                  <span style={{ fontSize: 13, color: "#6b7a99" }}>{t.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1126,7 +1298,7 @@ export default function AuditPage() {
       <div
         style={{
           position: "fixed", left: 0, right: 0, height: "1px",
-          background: "linear-gradient(90deg, transparent, #00ff8715, transparent)",
+          background: "linear-gradient(90deg, transparent, #3b82f615, transparent)",
           animation: "scanline 10s linear infinite",
           pointerEvents: "none", zIndex: 1,
         }}
@@ -1135,7 +1307,7 @@ export default function AuditPage() {
       <div
         style={{
           position: "fixed", inset: 0, opacity: 0.025,
-          backgroundImage: "linear-gradient(#00ff87 1px, transparent 1px), linear-gradient(90deg, #00ff87 1px, transparent 1px)",
+          backgroundImage: "linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px)",
           backgroundSize: "48px 48px", pointerEvents: "none",
         }}
       />
