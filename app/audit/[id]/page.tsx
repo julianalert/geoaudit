@@ -235,7 +235,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
             }}
           />
           <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99" }}>
-            NOT ANOTHER MARKETER — GEO AUDIT v1.0
+          FREE GEO AUDIT TOOL v1.0
           </span>
         </div>
         <h1
@@ -308,7 +308,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
         }}
       >
         <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#6b7a99", letterSpacing: "0.1em" }}>
-          Querying 4 LLMs × 4 prompts = 16 API calls. This takes 20–40 seconds.
+          Querying LLMs to find out if you are showing up in AI answers. This can take up to 2 minutes.
         </p>
       </div>
     </div>
@@ -382,7 +382,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
             }}
           />
           <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99" }}>
-            NOT ANOTHER MARKETER — GEO AUDIT v1.0
+          FREE GEO AUDIT TOOL v1.0
           </span>
         </div>
 
@@ -392,7 +392,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
             fontWeight: 800, letterSpacing: "-1px", color: "#f0f4ff", lineHeight: 1.1, marginBottom: 8,
           }}
         >
-          LLM VISIBILITY REPORT
+          GEO AUDIT REPORT
           <br />
           <span style={{ color: "#00ff87" }}>{d.brand.toUpperCase()}</span>
         </h1>
@@ -409,42 +409,6 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
           &nbsp;&nbsp;·&nbsp;&nbsp;
           Models: <span style={{ color: "#8892aa" }}>GPT-4o · Perplexity · Claude · Gemini</span>
         </p>
-
-        {/* Share URL bar */}
-        <div
-          style={{
-            display: "flex", alignItems: "center", gap: 10,
-            marginBottom: 20, padding: "10px 16px",
-            background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8,
-          }}
-        >
-          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", flexShrink: 0 }}>
-            SHARE URL
-          </span>
-          <div
-            style={{
-              flex: 1, padding: "6px 12px", background: "#0a0a14",
-              border: "1px solid #1e1e30", borderRadius: 4,
-              fontSize: 12, color: "#8892aa", fontFamily: "'Space Mono', monospace",
-              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-            }}
-          >
-            {shareUrl}
-          </div>
-          <button
-            onClick={handleCopy}
-            style={{
-              background: copied ? "#00ff8720" : "#1e1e30",
-              border: `1px solid ${copied ? "#00ff8740" : "#2e2e48"}`,
-              color: copied ? "#00ff87" : "#8892aa",
-              padding: "6px 14px", borderRadius: 4, cursor: "pointer",
-              fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 500,
-              transition: "all 0.2s",
-            }}
-          >
-            {copied ? "COPIED" : "COPY LINK"}
-          </button>
-        </div>
 
         {/* Combined score card */}
         <div
@@ -475,7 +439,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
           </div>
 
           {/* Dimension bars */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 240 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 240, flexGrow: 1 }}>
             {[
               { label: "Brand Awareness", score: d.awareness.score, color: d.awareness.color },
               { label: "Brand Positioning", score: d.positioning?.score ?? 0, color: d.positioning?.color ?? "#6b7a99" },
@@ -506,6 +470,42 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Share URL bar */}
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            marginTop: 14, padding: "10px 16px",
+            background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8,
+          }}
+        >
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", flexShrink: 0 }}>
+            SHARE URL
+          </span>
+          <div
+            style={{
+              flex: 1, padding: "6px 12px", background: "#0a0a14",
+              border: "1px solid #1e1e30", borderRadius: 4,
+              fontSize: 12, color: "#8892aa", fontFamily: "'Space Mono', monospace",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}
+          >
+            {shareUrl}
+          </div>
+          <button
+            onClick={handleCopy}
+            style={{
+              background: copied ? "#00ff8720" : "#1e1e30",
+              border: `1px solid ${copied ? "#00ff8740" : "#2e2e48"}`,
+              color: copied ? "#00ff87" : "#8892aa",
+              padding: "6px 14px", borderRadius: 4, cursor: "pointer",
+              fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 500,
+              transition: "all 0.2s",
+            }}
+          >
+            {copied ? "COPIED" : "COPY LINK"}
+          </button>
         </div>
       </div>
 
@@ -622,6 +622,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
           </div>
         </Card>
       </div>
+
+      <div style={{ borderBottom: "1px solid #1e1e30", marginBottom: 28 }} />
 
       {/* Card 1: Awareness */}
       <div className="fade" style={{ marginBottom: 28 }}>
@@ -853,8 +855,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </div>
 
               <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
-                background: "#00ff8715", border: "1px solid #00ff8730",
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                background: "#fbbf2415", border: "1px solid #fbbf2430",
                 padding: "4px 14px", borderRadius: 4, marginBottom: 16,
               }}>
                 ONE-TIME · $17
@@ -863,13 +865,13 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <button
                 onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
                 style={{
-                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
                   fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
                   cursor: "pointer", borderRadius: 6,
                   transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
                 UNLOCK FULL REPORT →
@@ -1000,8 +1002,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </div>
 
               <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
-                background: "#00ff8715", border: "1px solid #00ff8730",
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                background: "#fbbf2415", border: "1px solid #fbbf2430",
                 padding: "4px 14px", borderRadius: 4, marginBottom: 16,
               }}>
                 ONE-TIME · $17
@@ -1010,13 +1012,13 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <button
                 onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
                 style={{
-                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
                   fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
                   cursor: "pointer", borderRadius: 6,
                   transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
                 UNLOCK FULL REPORT →
@@ -1127,8 +1129,8 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </div>
 
               <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
-                background: "#00ff8715", border: "1px solid #00ff8730",
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                background: "#fbbf2415", border: "1px solid #fbbf2430",
                 padding: "4px 14px", borderRadius: 4, marginBottom: 16,
               }}>
                 ONE-TIME · $17
@@ -1137,13 +1139,13 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <button
                 onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
                 style={{
-                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
                   fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
                   cursor: "pointer", borderRadius: 6,
                   transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
                 UNLOCK FULL REPORT →

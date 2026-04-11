@@ -79,7 +79,7 @@ export default function Home() {
 
       <div
         style={{
-          maxWidth: 680,
+          maxWidth: 920,
           margin: "0 auto",
           padding: "80px 24px 60px",
           position: "relative",
@@ -133,8 +133,8 @@ export default function Home() {
             marginBottom: 16,
           }}
         >
-          Are You
-          <span style={{ color: "#00ff87" }}> Showing Up </span> in AI Answers?
+          ARE YOU SHOWING UP
+          <span style={{ color: "#00ff87" }}> IN AI ANSWERS? </span>
         </p>
 
         {/* Subheading */}
@@ -144,7 +144,7 @@ export default function Home() {
             fontSize: 15,
             color: "#8892aa",
             lineHeight: 1.6,
-            maxWidth: 520,
+            maxWidth: 860,
             marginBottom: 40,
           }}
         >
@@ -303,7 +303,7 @@ export default function Home() {
               e.currentTarget.style.boxShadow = "none";
             }}
           >
-            {loading ? "LAUNCHING AUDIT..." : "RUN AUDIT →"}
+            {loading ? "LAUNCHING AUDIT..." : "RUN AUDIT FOR FREE →"}
           </button>
         </div>
 
@@ -318,7 +318,7 @@ export default function Home() {
           }}
         >
           {[
-            "4 models queried",
+            "GPT, Claude, Gemini & Perplexity",
             "Real responses, not simulated",
             "Shareable report URL",
           ].map((t) => (
