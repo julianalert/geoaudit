@@ -717,173 +717,289 @@ function AuditResultsView({ d }: { d: AuditResult }) {
         </div>
       )}
 
-      {/* Card 3: Recommendation Rank */}
+      {/* Card 3: Recommendation Rank (Locked) */}
       <div className="fade" style={{ marginBottom: 28 }}>
         <SectionLabel>03 — RECOMMENDATION RANK</SectionLabel>
-        <Card>
-          <CardHeader
-            icon="◆" title="Recommendation Rank" score={d.recommendation.score}
-            label={d.recommendation.label} color={d.recommendation.color}
-            description="Do you appear when buyers search for your category?"
-          />
-
-          {/* Prompt used */}
-          <div style={{ marginBottom: 16, padding: "10px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6 }}>
-            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99" }}>
-              PROMPT USED &nbsp;
-            </span>
-            <span style={{ fontSize: 13, color: "#8892aa", fontStyle: "italic" }}>&ldquo;{d.recommendation.promptUsed}&rdquo;</span>
-          </div>
-
-          {/* Per-model rank grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
-            {d.recommendation.modelResults.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  padding: 14, background: "#0a0a14",
-                  border: `1px solid ${m.listed ? (m.rank !== null && m.rank <= 2 ? "#00ff8730" : "#fbbf2425") : "#f8717130"}`,
-                  borderRadius: 8, textAlign: "center",
-                }}
-              >
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#6b7a99", marginBottom: 8 }}>
-                  {m.model}
-                </div>
-                {m.listed ? (
-                  <>
-                    <div
-                      style={{
-                        fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1,
-                        color: m.rank !== null && m.rank <= 2 ? "#00ff87" : "#fbbf24",
-                      }}
-                    >
-                      #{m.rank}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#6b7a99", marginTop: 4 }}>of 5 listed</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>
-                      —
-                    </div>
-                    <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
-                  </>
-                )}
-                {m.aboveYou.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 10, color: "#4a5270", lineHeight: 1.4 }}>
-                    Above you: {m.aboveYou.join(", ")}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Share of voice */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-              SHARE OF VOICE — ALL MODELS
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {d.recommendation.shareOfVoice.map((item, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 12, color: "#8892aa", width: 70, flexShrink: 0 }}>{item.name}</span>
-                  <div style={{ flex: 1, height: 4, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ width: `${item.pct}%`, height: "100%", background: sovColors[i] || "#3a4060", borderRadius: 2, transition: "width 1.2s ease" }} />
-                  </div>
-                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: sovColors[i] || "#3a4060", width: 36, textAlign: "right" }}>
-                    {item.pct}%
+        <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
+          {/* Card header (visible above blur) */}
+          <div style={{ padding: "24px 28px 0" }}>
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 16,
+                marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #1e1e30",
+              }}
+            >
+              <div style={{ fontSize: 22, opacity: 0.9, flexShrink: 0 }}>◆</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Recommendation Rank</span>
+                  <span style={{
+                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                  }}>
+                    🔒 LOCKED
                   </span>
                 </div>
-              ))}
+                <div style={{ fontSize: 13, color: "#6b7a99" }}>Do you appear when buyers search for your category?</div>
+              </div>
             </div>
           </div>
 
-          <InsightBox>{d.recommendation.insight}</InsightBox>
-        </Card>
+          {/* Blurred + overlay container */}
+          <div style={{ position: "relative", overflow: "hidden" }}>
+            {/* Blurred fake content */}
+            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+              <div style={{ marginBottom: 16, padding: "10px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6 }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99" }}>PROMPT USED &nbsp;</span>
+                <span style={{ fontSize: 13, color: "#8892aa", fontStyle: "italic" }}>&ldquo;What are the best project management tools available right now?&rdquo;</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
+                {[
+                  { model: "GPT-4o", rank: 2, listed: true },
+                  { model: "Perplexity", rank: null, listed: false },
+                  { model: "Claude", rank: 3, listed: true },
+                  { model: "Gemini", rank: 1, listed: true },
+                ].map((m, i) => (
+                  <div key={i} style={{ padding: 14, background: "#0a0a14", border: `1px solid ${m.listed ? "#fbbf2425" : "#f8717130"}`, borderRadius: 8, textAlign: "center" }}>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#6b7a99", marginBottom: 8 }}>{m.model}</div>
+                    {m.listed ? (
+                      <>
+                        <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
+                        <div style={{ fontSize: 11, color: "#6b7a99", marginTop: 4 }}>of 5 listed</div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>—</div>
+                        <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>SHARE OF VOICE — ALL MODELS</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[
+                    { name: "Competitor A", pct: 34 },
+                    { name: "Your Brand", pct: 22 },
+                    { name: "Competitor B", pct: 18 },
+                    { name: "Competitor C", pct: 14 },
+                    { name: "Others", pct: 12 },
+                  ].map((item, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 12, color: "#8892aa", width: 70, flexShrink: 0 }}>{item.name}</span>
+                      <div style={{ flex: 1, height: 4, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ width: `${item.pct}%`, height: "100%", background: sovColors[i] || "#3a4060", borderRadius: 2 }} />
+                      </div>
+                      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: sovColors[i] || "#3a4060", width: 36, textAlign: "right" }}>{item.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 6, borderLeft: "3px solid #00ff87" }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+                <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Your brand is invisible on 2 out of 4 models. Competitors are capturing buyer intent you should own.</p>
+              </div>
+            </div>
+
+            {/* Gradient overlay with CTA */}
+            <div
+              style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                padding: "40px 32px",
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                Are you showing up when buyers search for your category?
+              </div>
+
+              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                Unlock your full Recommendation Rank report. See exactly where each LLM ranks you, who's above you, and your share of voice vs competitors.
+              </div>
+
+              <span style={{
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
+                background: "#00ff8715", border: "1px solid #00ff8730",
+                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+              }}>
+                ONE-TIME · $17
+              </span>
+
+              <button
+                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                style={{
+                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                  cursor: "pointer", borderRadius: 6,
+                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                UNLOCK FULL REPORT →
+              </button>
+
+              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                Includes source audit + competitor gap analysis + 90-day fix roadmap
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Card 4: Competitive Context */}
+      {/* Card 4: Competitive Context (Locked) */}
       <div className="fade" style={{ marginBottom: 28 }}>
         <SectionLabel>04 — COMPETITIVE CONTEXT</SectionLabel>
-        <Card>
-          <CardHeader
-            icon="◇" title="Competitive Context" score={d.competitive.score}
-            label={d.competitive.label} color={d.competitive.color}
-            description={`How do models compare you to ${d.competitive.competitor}?`}
-          />
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-            {/* Wins */}
-            <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 8 }}>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", marginBottom: 12 }}>
-                WHERE YOU WIN
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {d.competitive.wins.map((w, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <span style={{ color: "#00ff87", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
-                    <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{w}</span>
-                  </div>
-                ))}
-                {d.competitive.wins.length === 0 && (
-                  <span style={{ fontSize: 13, color: "#4a5270", fontStyle: "italic" }}>No clear wins identified</span>
-                )}
-              </div>
-            </div>
-            {/* Losses */}
-            <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 8 }}>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>
-                WHERE YOU LOSE
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {d.competitive.losses.map((l, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
-                    <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{l}</span>
-                  </div>
-                ))}
-                {d.competitive.losses.length === 0 && (
-                  <span style={{ fontSize: 13, color: "#4a5270", fontStyle: "italic" }}>No clear losses identified</span>
-                )}
+        <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
+          {/* Card header (visible above blur) */}
+          <div style={{ padding: "24px 28px 0" }}>
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 16,
+                marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #1e1e30",
+              }}
+            >
+              <div style={{ fontSize: 22, opacity: 0.9, flexShrink: 0 }}>◇</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Competitive Context</span>
+                  <span style={{
+                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                  }}>
+                    🔒 LOCKED
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: "#6b7a99" }}>How do models compare you to your top competitors?</div>
               </div>
             </div>
           </div>
 
-          {/* Sentiment table */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-              SENTIMENT PER MODEL
-            </div>
-            <table style={{ borderCollapse: "collapse", width: "100%" }}>
-              <thead>
-                <tr>
-                  <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>MODEL</th>
-                  <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>SENTIMENT</th>
-                  <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>NOTE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.competitive.sentimentPerModel.map((row, i) => {
-                  const sColors: Record<string, string> = { positive: "#00ff87", neutral: "#fbbf24", negative: "#f87171" };
-                  const c = sColors[row.sentiment] || "#6b7a99";
-                  return (
-                    <tr key={i}>
-                      <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.model}</td>
-                      <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
-                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>
-                          {row.sentiment}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: 13, color: "#8892aa", padding: "10px 0 10px 12px", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.note}</td>
+          {/* Blurred + overlay container */}
+          <div style={{ position: "relative", overflow: "hidden" }}>
+            {/* Blurred fake content */}
+            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+                <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 8 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", marginBottom: 12 }}>WHERE YOU WIN</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {["Ease of onboarding", "Customer support quality", "Pricing flexibility"].map((w, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        <span style={{ color: "#00ff87", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{w}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 8 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>WHERE YOU LOSE</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {["Enterprise feature depth", "Integration ecosystem", "Brand recognition"].map((l, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                        <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
+                        <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{l}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>SENTIMENT PER MODEL</div>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      {["MODEL", "SENTIMENT", "NOTE"].map((h) => (
+                        <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {[
+                      { model: "GPT-4o", sentiment: "positive", note: "Positions brand favorably vs market leader." },
+                      { model: "Perplexity", sentiment: "neutral", note: "Acknowledges strengths but notes gaps." },
+                      { model: "Claude", sentiment: "positive", note: "Highlights differentiated positioning." },
+                      { model: "Gemini", sentiment: "negative", note: "Flags competitor advantages in enterprise." },
+                    ].map((row, i) => {
+                      const sColors: Record<string, string> = { positive: "#00ff87", neutral: "#fbbf24", negative: "#f87171" };
+                      const c = sColors[row.sentiment] || "#6b7a99";
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.model}</td>
+                          <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>{row.sentiment}</span>
+                          </td>
+                          <td style={{ fontSize: 13, color: "#8892aa", padding: "10px 0 10px 12px", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.note}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #00ff8720", borderRadius: 6, borderLeft: "3px solid #00ff87" }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#00ff87", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+                <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Models have a mixed view of your brand vs competitors. Enterprise positioning is the biggest gap to close.</p>
+              </div>
+            </div>
 
-          <InsightBox>{d.competitive.insight}</InsightBox>
-        </Card>
+            {/* Gradient overlay with CTA */}
+            <div
+              style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                padding: "40px 32px",
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                How does your brand stack up against competitors in AI?
+              </div>
+
+              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                Unlock your full Competitive Context report. See where each LLM thinks you win and lose, sentiment breakdowns per model, and the gaps your competitors are exploiting.
+              </div>
+
+              <span style={{
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
+                background: "#00ff8715", border: "1px solid #00ff8730",
+                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+              }}>
+                ONE-TIME · $17
+              </span>
+
+              <button
+                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                style={{
+                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                  cursor: "pointer", borderRadius: 6,
+                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                UNLOCK FULL REPORT →
+              </button>
+
+              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                Includes source audit + competitor gap analysis + 90-day fix roadmap
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Card 5: Source Attribution (Locked) */}
@@ -915,7 +1031,7 @@ function AuditResultsView({ d }: { d: AuditResult }) {
           </div>
 
           {/* Blurred + overlay container */}
-          <div style={{ position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "relative", overflow: "hidden", minHeight: 380 }}>
             {/* Blurred fake content */}
             <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
               {/* Fake citation table */}
@@ -936,8 +1052,6 @@ function AuditResultsView({ d }: { d: AuditResult }) {
                       { domain: "G2", yours: 12, comp: 847, status: "danger" },
                       { domain: "Reddit", yours: 4, comp: 203, status: "danger" },
                       { domain: "Capterra", yours: 28, comp: 312, status: "warn" },
-                      { domain: "TechCrunch", yours: 2, comp: 31, status: "warn" },
-                      { domain: "Your Blog", yours: 0, comp: 0, status: "ok" },
                     ].map((s, i) => {
                       const gc: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#00ff87" };
                       const c = gc[s.status] || "#6b7a99";
@@ -959,51 +1073,6 @@ function AuditResultsView({ d }: { d: AuditResult }) {
                 </table>
               </div>
 
-              {/* Fake missing sources */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                  MISSING HIGH-VALUE SOURCES
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {[
-                    { domain: "ProductHunt", reason: "High citation rate in Perplexity for SaaS tools." },
-                    { domain: "Zapier Blog", reason: "Integration content is heavily cited by AI models." },
-                    { domain: "HubSpot Blog", reason: "Comparison content drives significant citation share." },
-                  ].map((s, i) => (
-                    <div key={i} style={{ display: "flex", gap: 14, padding: "10px 14px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171", flexShrink: 0 }}>✗ {s.domain}</span>
-                      <span style={{ fontSize: 13, color: "#6b7a99", lineHeight: 1.55 }}>{s.reason}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Fake fix priority */}
-              <div>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                  FIX PRIORITY ROADMAP
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {[
-                    { n: 1, action: "Increase review presence on G2", impact: "High", effort: "Medium" },
-                    { n: 2, action: "Publish comparison content on Zapier", impact: "High", effort: "Low" },
-                    { n: 3, action: "Update product listing on Capterra", impact: "Medium", effort: "Low" },
-                    { n: 4, action: "Create FAQ addressing market confusion", impact: "High", effort: "Low" },
-                  ].map((f) => (
-                    <div key={f.n} style={{ display: "flex", gap: 14, padding: "12px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6, alignItems: "flex-start" }}>
-                      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#2a2a40", flexShrink: 0, lineHeight: 1, paddingTop: 2 }}>0{f.n}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "#dce4f5", marginBottom: 4 }}>{f.action}</div>
-                        <div style={{ fontSize: 12, color: "#6b7a99" }}>Placeholder explanation for this action item.</div>
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0, alignItems: "flex-end" }}>
-                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: f.impact === "High" ? "#f8717118" : "#fbbf2418", color: f.impact === "High" ? "#f87171" : "#fbbf24", fontWeight: 500, whiteSpace: "nowrap" }}>Impact: {f.impact}</span>
-                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: f.effort === "Low" ? "#00ff8718" : "#fbbf2418", color: f.effort === "Low" ? "#00ff87" : "#fbbf24", fontWeight: 500, whiteSpace: "nowrap" }}>Effort: {f.effort}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Gradient overlay with CTA */}
