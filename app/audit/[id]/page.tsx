@@ -84,6 +84,7 @@ interface AuditRow {
   result: AuditResult | null;
   brand: string;
   category: string;
+  website_url: string | null;
 }
 
 // ── Shared Components ────────────────────────────────────────
@@ -354,7 +355,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 
 // ── Full Results ─────────────────────────────────────────────
 
-function AuditResultsView({ d }: { d: AuditResult }) {
+function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: string | null }) {
   const [copied, setCopied] = useState(false);
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -371,43 +372,6 @@ function AuditResultsView({ d }: { d: AuditResult }) {
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "48px 24px", position: "relative", zIndex: 2 }}>
-      {/* Share URL bar */}
-      <div
-        className="fade"
-        style={{
-          display: "flex", alignItems: "center", gap: 10,
-          marginBottom: 28, padding: "10px 16px",
-          background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8,
-        }}
-      >
-        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", flexShrink: 0 }}>
-          SHARE URL
-        </span>
-        <div
-          style={{
-            flex: 1, padding: "6px 12px", background: "#0a0a14",
-            border: "1px solid #1e1e30", borderRadius: 4,
-            fontSize: 12, color: "#8892aa", fontFamily: "'Space Mono', monospace",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}
-        >
-          {shareUrl}
-        </div>
-        <button
-          onClick={handleCopy}
-          style={{
-            background: copied ? "#00ff8720" : "#1e1e30",
-            border: `1px solid ${copied ? "#00ff8740" : "#2e2e48"}`,
-            color: copied ? "#00ff87" : "#8892aa",
-            padding: "6px 14px", borderRadius: 4, cursor: "pointer",
-            fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 500,
-            transition: "all 0.2s",
-          }}
-        >
-          {copied ? "COPIED" : "COPY LINK"}
-        </button>
-      </div>
-
       {/* Page Header */}
       <div className="fade" style={{ marginBottom: 40, paddingBottom: 32, borderBottom: "1px solid #1e1e30" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
@@ -422,59 +386,123 @@ function AuditResultsView({ d }: { d: AuditResult }) {
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 20 }}>
-          <div>
-            <h1
-              style={{
-                fontFamily: "'Syne', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
-                fontWeight: 800, letterSpacing: "-1px", color: "#f0f4ff", lineHeight: 1.1, marginBottom: 8,
-              }}
-            >
-              LLM VISIBILITY REPORT
-              <br />
-              <span style={{ color: "#00ff87" }}>{d.brand.toUpperCase()}</span>
-            </h1>
-            <p style={{ fontSize: 14, color: "#6b7a99" }}>
-              Category: <span style={{ color: "#8892aa" }}>{d.category}</span>
+        <h1
+          style={{
+            fontFamily: "'Syne', sans-serif", fontSize: "clamp(26px, 4vw, 42px)",
+            fontWeight: 800, letterSpacing: "-1px", color: "#f0f4ff", lineHeight: 1.1, marginBottom: 8,
+          }}
+        >
+          LLM VISIBILITY REPORT
+          <br />
+          <span style={{ color: "#00ff87" }}>{d.brand.toUpperCase()}</span>
+        </h1>
+        <p style={{ fontSize: 14, color: "#6b7a99", marginBottom: 14 }}>
+          {websiteUrl && (
+            <>
+              Website: <span style={{ color: "#8892aa" }}>{websiteUrl}</span>
               &nbsp;&nbsp;·&nbsp;&nbsp;
-              Audited: <span style={{ color: "#8892aa" }}>{d.auditDate}</span>
-              &nbsp;&nbsp;·&nbsp;&nbsp;
-              Models: <span style={{ color: "#8892aa" }}>GPT-4o · Perplexity · Claude · Gemini</span>
-            </p>
+            </>
+          )}
+          Category: <span style={{ color: "#8892aa" }}>{d.category}</span>
+          &nbsp;&nbsp;·&nbsp;&nbsp;
+          Audited: <span style={{ color: "#8892aa" }}>{d.auditDate}</span>
+          &nbsp;&nbsp;·&nbsp;&nbsp;
+          Models: <span style={{ color: "#8892aa" }}>GPT-4o · Perplexity · Claude · Gemini</span>
+        </p>
+
+        {/* Share URL bar */}
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            marginBottom: 20, padding: "10px 16px",
+            background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8,
+          }}
+        >
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", flexShrink: 0 }}>
+            SHARE URL
+          </span>
+          <div
+            style={{
+              flex: 1, padding: "6px 12px", background: "#0a0a14",
+              border: "1px solid #1e1e30", borderRadius: 4,
+              fontSize: 12, color: "#8892aa", fontFamily: "'Space Mono', monospace",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}
+          >
+            {shareUrl}
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99", marginBottom: 4 }}>
-              OVERALL SCORE
+          <button
+            onClick={handleCopy}
+            style={{
+              background: copied ? "#00ff8720" : "#1e1e30",
+              border: `1px solid ${copied ? "#00ff8740" : "#2e2e48"}`,
+              color: copied ? "#00ff87" : "#8892aa",
+              padding: "6px 14px", borderRadius: 4, cursor: "pointer",
+              fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 500,
+              transition: "all 0.2s",
+            }}
+          >
+            {copied ? "COPIED" : "COPY LINK"}
+          </button>
+        </div>
+
+        {/* Combined score card */}
+        <div
+          style={{
+            padding: "24px 28px", background: "#0f0f1a",
+            border: `1px solid ${verdictColor}30`, borderRadius: 10,
+            display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap",
+          }}
+        >
+          {/* Score ring */}
+          <ScoreRing score={d.overallScore} size={96} stroke={8} />
+
+          {/* Verdict + sub */}
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#6b7a99", marginBottom: 6 }}>
+              OVERALL LLM VISIBILITY SCORE
             </div>
             <div
               style={{
-                fontFamily: "'Syne', sans-serif", fontSize: 52, fontWeight: 800,
-                color: verdictColor, lineHeight: 1, letterSpacing: "-2px",
+                fontFamily: "'Syne', sans-serif", fontSize: "clamp(22px, 3vw, 34px)",
+                fontWeight: 800, color: verdictColor, lineHeight: 1.05,
+                letterSpacing: "-0.5px", marginBottom: 10,
               }}
             >
-              {d.overallScore}
-            </div>
-            <div style={{ fontSize: 12, color: verdictColor, fontWeight: 600, letterSpacing: "0.05em", marginTop: 2 }}>
               {d.overallVerdict}
             </div>
+            <p style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.6, margin: 0 }}>{d.overallSub}</p>
           </div>
-        </div>
 
-        <div style={{ marginTop: 16, padding: "12px 16px", background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8 }}>
-          <p style={{ fontSize: 14, color: "#8892aa", lineHeight: 1.6, marginBottom: 14 }}>{d.overallSub}</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          {/* Dimension bars */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 240 }}>
             {[
-              { label: "Awareness", score: d.awareness.score, color: d.awareness.color },
-              { label: "Positioning", score: d.positioning?.score ?? 0, color: d.positioning?.color ?? "#6b7a99" },
-              { label: "Recommendation", score: d.recommendation.score, color: d.recommendation.color },
-              { label: "Competitive", score: d.competitive.score, color: d.competitive.color },
+              { label: "Brand Awareness", score: d.awareness.score, color: d.awareness.color },
+              { label: "Brand Positioning", score: d.positioning?.score ?? 0, color: d.positioning?.color ?? "#6b7a99" },
+              { label: "Recommendation Rank", score: d.recommendation.score, color: d.recommendation.color },
+              { label: "Competitive Context", score: d.competitive.score, color: d.competitive.color },
             ].map((dim) => (
-              <div key={dim.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontSize: 11, color: "#6b7a99", width: 100, textAlign: "right", lineHeight: 1.3 }}>{dim.label}</div>
-                <div style={{ flex: 1, height: 3, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
+              <div key={dim.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    fontFamily: "'Space Mono', monospace", fontSize: 9,
+                    letterSpacing: "0.05em", color: "#6b7a99",
+                    width: 110, textAlign: "right", lineHeight: 1.4, flexShrink: 0,
+                  }}
+                >
+                  {dim.label.toUpperCase()}
+                </div>
+                <div style={{ flex: 1, height: 4, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
                   <div style={{ width: `${dim.score}%`, height: "100%", background: dim.color, borderRadius: 2, transition: "width 1.2s ease" }} />
                 </div>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: dim.color, width: 26, fontWeight: 600 }}>{dim.score}</div>
+                <div
+                  style={{
+                    fontFamily: "'Space Mono', monospace", fontSize: 11,
+                    color: dim.color, width: 28, fontWeight: 700, textAlign: "right", flexShrink: 0,
+                  }}
+                >
+                  {dim.score}
+                </div>
               </div>
             ))}
           </div>
@@ -1233,7 +1261,7 @@ export default function AuditPage() {
       ) : audit.status === "pending" ? (
         <LoadingState brand={audit.brand} category={audit.category} />
       ) : audit.status === "complete" && audit.result ? (
-        <AuditResultsView d={audit.result} />
+        <AuditResultsView d={audit.result} websiteUrl={audit.website_url} />
       ) : (
         <ErrorState onRetry={() => (window.location.href = "/")} />
       )}
