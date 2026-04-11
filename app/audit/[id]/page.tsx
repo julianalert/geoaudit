@@ -46,6 +46,21 @@ interface AuditResult {
     shareOfVoice: Array<{ name: string; pct: number }>;
     insight: string;
   };
+  positioning: {
+    score: number;
+    label: string;
+    color: string;
+    modelResults: Array<{
+      model: string;
+      strength: string;
+      targetCustomer: string;
+      valueProp: string;
+      differentiation: string;
+      accuracyScore: number;
+      note: string;
+    }>;
+    insight: string;
+  };
   competitive: {
     score: number;
     label: string;
@@ -60,26 +75,6 @@ interface AuditResult {
     }>;
     overallSentiment: string;
     insight: string;
-  };
-  sources: {
-    score: number;
-    label: string;
-    color: string;
-    topCitedSources: Array<{
-      url: string;
-      domain: string;
-      yourCitations: number;
-      competitorCitations: number;
-      status: string;
-    }>;
-    missingSources: Array<{ domain: string; reason: string }>;
-    fixPriority: Array<{
-      priority: number;
-      action: string;
-      why: string;
-      impact: string;
-      effort: string;
-    }>;
   };
 }
 
@@ -124,10 +119,11 @@ function ModelBadge({ model, status }: { model: string; status: string }) {
   const colors: Record<string, { bg: string; border: string; text: string }> = {
     strong: { bg: "#00ff8715", border: "#00ff8730", text: "#00ff87" },
     weak: { bg: "#fbbf2415", border: "#fbbf2430", text: "#fbbf24" },
+    confused: { bg: "#fb923c15", border: "#fb923c30", text: "#fb923c" },
     unknown: { bg: "#f8717115", border: "#f8717130", text: "#f87171" },
     error: { bg: "#f8717115", border: "#f8717130", text: "#f87171" },
   };
-  const icons: Record<string, string> = { strong: "●", weak: "◐", unknown: "○", error: "✗" };
+  const icons: Record<string, string> = { strong: "●", weak: "◐", confused: "◌", unknown: "○", error: "✗" };
   const c = colors[status] || colors.unknown;
   return (
     <span
@@ -311,7 +307,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
         }}
       >
         <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#6b7a99", letterSpacing: "0.1em" }}>
-          Querying 4 LLMs × 3 prompts = 12 API calls. This takes 15–30 seconds.
+          Querying 4 LLMs × 4 prompts = 16 API calls. This takes 20–40 seconds.
         </p>
       </div>
     </div>
@@ -465,7 +461,23 @@ function AuditResultsView({ d }: { d: AuditResult }) {
         </div>
 
         <div style={{ marginTop: 16, padding: "12px 16px", background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 8 }}>
-          <p style={{ fontSize: 14, color: "#8892aa", lineHeight: 1.6 }}>{d.overallSub}</p>
+          <p style={{ fontSize: 14, color: "#8892aa", lineHeight: 1.6, marginBottom: 14 }}>{d.overallSub}</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {[
+              { label: "Awareness", score: d.awareness.score, color: d.awareness.color },
+              { label: "Positioning", score: d.positioning?.score ?? 0, color: d.positioning?.color ?? "#6b7a99" },
+              { label: "Recommendation", score: d.recommendation.score, color: d.recommendation.color },
+              { label: "Competitive", score: d.competitive.score, color: d.competitive.color },
+            ].map((dim) => (
+              <div key={dim.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ fontSize: 11, color: "#6b7a99", width: 100, textAlign: "right", lineHeight: 1.3 }}>{dim.label}</div>
+                <div style={{ flex: 1, height: 3, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${dim.score}%`, height: "100%", background: dim.color, borderRadius: 2, transition: "width 1.2s ease" }} />
+                </div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: dim.color, width: 26, fontWeight: 600 }}>{dim.score}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -643,9 +655,71 @@ function AuditResultsView({ d }: { d: AuditResult }) {
         </Card>
       </div>
 
-      {/* Card 2: Recommendation Rank */}
+      {/* Card 2: Brand Positioning */}
+      {d.positioning && (
+        <div className="fade" style={{ marginBottom: 28 }}>
+          <SectionLabel>02 — BRAND POSITIONING</SectionLabel>
+          <Card>
+            <CardHeader
+              icon="◎" title="Brand Positioning" score={d.positioning.score}
+              label={d.positioning.label} color={d.positioning.color}
+              description="How do LLMs understand your market position and value proposition?"
+            />
+
+            <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+              {d.positioning.modelResults.map((m, i) => {
+                const statusColor = m.strength === "strong" ? "#b0bcd8" : m.strength === "weak" ? "#8892aa" : "#4a5270";
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      display: "flex", gap: 14, padding: "12px 14px",
+                      background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6,
+                    }}
+                  >
+                    <div style={{ flexShrink: 0, paddingTop: 1 }}>
+                      <ModelBadge model={m.model} status={m.strength} />
+                    </div>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {[
+                        { label: "Target", value: m.targetCustomer },
+                        { label: "Value prop", value: m.valueProp },
+                        { label: "Differentiator", value: m.differentiation },
+                      ].map((row) => (
+                        <div key={row.label}>
+                          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#6b7a99", marginRight: 8 }}>
+                            {row.label.toUpperCase()}
+                          </span>
+                          <span style={{ fontSize: 13, color: statusColor, lineHeight: 1.5 }}>{row.value || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ flexShrink: 0, display: "flex", alignItems: "flex-end", paddingBottom: 2 }}>
+                      <div style={{ display: "flex", gap: 3 }}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <div
+                            key={n}
+                            style={{
+                              width: 6, height: 6, borderRadius: "50%",
+                              background: n <= m.accuracyScore ? (m.strength === "strong" ? "#00ff87" : m.strength === "weak" ? "#fbbf24" : "#fb923c") : "#1e1e30",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <InsightBox>{d.positioning.insight}</InsightBox>
+          </Card>
+        </div>
+      )}
+
+      {/* Card 3: Recommendation Rank */}
       <div className="fade" style={{ marginBottom: 28 }}>
-        <SectionLabel>02 — RECOMMENDATION RANK</SectionLabel>
+        <SectionLabel>03 — RECOMMENDATION RANK</SectionLabel>
         <Card>
           <CardHeader
             icon="◆" title="Recommendation Rank" score={d.recommendation.score}
@@ -728,9 +802,9 @@ function AuditResultsView({ d }: { d: AuditResult }) {
         </Card>
       </div>
 
-      {/* Card 3: Competitive Context */}
+      {/* Card 4: Competitive Context */}
       <div className="fade" style={{ marginBottom: 28 }}>
-        <SectionLabel>03 — COMPETITIVE CONTEXT</SectionLabel>
+        <SectionLabel>04 — COMPETITIVE CONTEXT</SectionLabel>
         <Card>
           <CardHeader
             icon="◇" title="Competitive Context" score={d.competitive.score}
@@ -812,130 +886,178 @@ function AuditResultsView({ d }: { d: AuditResult }) {
         </Card>
       </div>
 
-      {/* Card 4: Source Attribution */}
+      {/* Card 5: Source Attribution (Locked) */}
       <div className="fade" style={{ marginBottom: 40 }}>
-        <SectionLabel>04 — SOURCE ATTRIBUTION</SectionLabel>
-        <Card>
-          <CardHeader
-            icon="◉" title="Source Attribution" score={d.sources.score}
-            label={d.sources.label} color={d.sources.color}
-            description="Why do models know what they know about you — and what's missing?"
-          />
-
-          {/* Citation table */}
-          {d.sources.topCitedSources.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                TOP CITATION SOURCES
+        <SectionLabel>05 — SOURCE ATTRIBUTION</SectionLabel>
+        <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
+          {/* Card header (visible above blur) */}
+          <div style={{ padding: "24px 28px 0" }}>
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 16,
+                marginBottom: 20, paddingBottom: 20, borderBottom: "1px solid #1e1e30",
+              }}
+            >
+              <div style={{ fontSize: 22, opacity: 0.9, flexShrink: 0 }}>◉</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Source Attribution</span>
+                  <span style={{
+                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                  }}>
+                    🔒 LOCKED
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: "#6b7a99" }}>Which sites are feeding LLMs information about your brand?</div>
               </div>
-              <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>SOURCE</th>
-                    <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>YOUR CITATIONS</th>
-                    <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>COMPETITOR AVG</th>
-                    <th style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>GAP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.sources.topCitedSources.map((s, i) => {
-                    const gapColors: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#00ff87" };
-                    const c = gapColors[s.status] || "#6b7a99";
-                    const gap = s.competitorCitations - s.yourCitations;
-                    return (
-                      <tr key={i}>
-                        <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
-                          {s.domain}
-                        </td>
-                        <td style={{ color: c, fontWeight: 600, fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
-                          {s.yourCitations}
-                        </td>
-                        <td style={{ color: "#6b7a99", fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
-                          {s.competitorCitations}
-                        </td>
-                        <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
-                          {gap > 0 ? (
+            </div>
+          </div>
+
+          {/* Blurred + overlay container */}
+          <div style={{ position: "relative", overflow: "hidden" }}>
+            {/* Blurred fake content */}
+            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+              {/* Fake citation table */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
+                  TOP CITATION SOURCES
+                </div>
+                <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      {["SOURCE", "YOUR CITATIONS", "COMPETITOR AVG", "GAP"].map((h) => (
+                        <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { domain: "G2", yours: 12, comp: 847, status: "danger" },
+                      { domain: "Reddit", yours: 4, comp: 203, status: "danger" },
+                      { domain: "Capterra", yours: 28, comp: 312, status: "warn" },
+                      { domain: "TechCrunch", yours: 2, comp: 31, status: "warn" },
+                      { domain: "Your Blog", yours: 0, comp: 0, status: "ok" },
+                    ].map((s, i) => {
+                      const gc: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#00ff87" };
+                      const c = gc[s.status] || "#6b7a99";
+                      const gap = s.comp - s.yours;
+                      return (
+                        <tr key={i}>
+                          <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.domain}</td>
+                          <td style={{ color: c, fontWeight: 600, fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.yours}</td>
+                          <td style={{ color: "#6b7a99", fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.comp}</td>
+                          <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30" }}>
                             <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>
-                              -{gap} behind
+                              {gap > 0 ? `-${gap} behind` : "on par"}
                             </span>
-                          ) : (
-                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#00ff8715", color: "#00ff87", fontWeight: 500 }}>
-                              on par
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* Missing sources */}
-          {d.sources.missingSources.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                MISSING HIGH-VALUE SOURCES
+              {/* Fake missing sources */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
+                  MISSING HIGH-VALUE SOURCES
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { domain: "ProductHunt", reason: "High citation rate in Perplexity for SaaS tools." },
+                    { domain: "Zapier Blog", reason: "Integration content is heavily cited by AI models." },
+                    { domain: "HubSpot Blog", reason: "Comparison content drives significant citation share." },
+                  ].map((s, i) => (
+                    <div key={i} style={{ display: "flex", gap: 14, padding: "10px 14px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171", flexShrink: 0 }}>✗ {s.domain}</span>
+                      <span style={{ fontSize: 13, color: "#6b7a99", lineHeight: 1.55 }}>{s.reason}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {d.sources.missingSources.map((s, i) => (
-                  <div key={i} style={{ display: "flex", gap: 14, padding: "10px 14px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171", flexShrink: 0, paddingTop: 1 }}>✗ {s.domain}</span>
-                    <span style={{ fontSize: 13, color: "#6b7a99", lineHeight: 1.55 }}>{s.reason}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Fix priority */}
-          {d.sources.fixPriority.length > 0 && (
-            <div>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                FIX PRIORITY ROADMAP
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {d.sources.fixPriority.map((f, i) => {
-                  const impactColor = f.impact === "High" ? "#f87171" : "#fbbf24";
-                  const effortColor = f.effort === "Low" ? "#00ff87" : f.effort === "Medium" ? "#fbbf24" : "#f87171";
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        display: "flex", gap: 14, padding: "12px 14px",
-                        background: "#0a0a14", border: "1px solid #1e1e30",
-                        borderRadius: 6, alignItems: "flex-start",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontFamily: "'Syne', sans-serif", fontSize: 20,
-                          fontWeight: 800, color: "#2a2a40", flexShrink: 0,
-                          lineHeight: 1, paddingTop: 2,
-                        }}
-                      >
-                        0{f.priority}
-                      </div>
+              {/* Fake fix priority */}
+              <div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
+                  FIX PRIORITY ROADMAP
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {[
+                    { n: 1, action: "Increase review presence on G2", impact: "High", effort: "Medium" },
+                    { n: 2, action: "Publish comparison content on Zapier", impact: "High", effort: "Low" },
+                    { n: 3, action: "Update product listing on Capterra", impact: "Medium", effort: "Low" },
+                    { n: 4, action: "Create FAQ addressing market confusion", impact: "High", effort: "Low" },
+                  ].map((f) => (
+                    <div key={f.n} style={{ display: "flex", gap: 14, padding: "12px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6, alignItems: "flex-start" }}>
+                      <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 800, color: "#2a2a40", flexShrink: 0, lineHeight: 1, paddingTop: 2 }}>0{f.n}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: "#dce4f5", marginBottom: 4 }}>{f.action}</div>
-                        <div style={{ fontSize: 12, color: "#6b7a99", lineHeight: 1.5 }}>{f.why}</div>
+                        <div style={{ fontSize: 12, color: "#6b7a99" }}>Placeholder explanation for this action item.</div>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0, alignItems: "flex-end" }}>
-                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${impactColor}18`, color: impactColor, fontWeight: 500, whiteSpace: "nowrap" }}>
-                          Impact: {f.impact}
-                        </span>
-                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${effortColor}18`, color: effortColor, fontWeight: 500, whiteSpace: "nowrap" }}>
-                          Effort: {f.effort}
-                        </span>
+                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: f.impact === "High" ? "#f8717118" : "#fbbf2418", color: f.impact === "High" ? "#f87171" : "#fbbf24", fontWeight: 500, whiteSpace: "nowrap" }}>Impact: {f.impact}</span>
+                        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: f.effort === "Low" ? "#00ff8718" : "#fbbf2418", color: f.effort === "Low" ? "#00ff87" : "#fbbf24", fontWeight: 500, whiteSpace: "nowrap" }}>Effort: {f.effort}</span>
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
             </div>
-          )}
-        </Card>
+
+            {/* Gradient overlay with CTA */}
+            <div
+              style={{
+                position: "absolute", inset: 0,
+                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                padding: "40px 32px",
+              }}
+            >
+              {/* Lock icon */}
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+
+              <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                Where do LLMs get their information about you?
+              </div>
+
+              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                Unlock your full Source Attribution report. See exactly which sites are feeding LLMs information about your brand, where you&apos;re missing vs competitors, and a prioritized action plan to fix it.
+              </div>
+
+              <span style={{
+                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#00ff87",
+                background: "#00ff8715", border: "1px solid #00ff8730",
+                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+              }}>
+                ONE-TIME · $17
+              </span>
+
+              <button
+                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                style={{
+                  background: "#00ff87", color: "#0a0a0f", border: "none",
+                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                  cursor: "pointer", borderRadius: 6,
+                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #00ff8740"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                UNLOCK FULL REPORT →
+              </button>
+
+              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                Includes source audit + competitor gap analysis + 90-day fix roadmap
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* CTA */}

@@ -54,7 +54,7 @@ async function callOpenAI(prompt: string): Promise<string> {
   return res.choices[0]?.message?.content ?? "";
 }
 
-async function callPerplexity(prompt: string): Promise<{ text: string; citations: string[] }> {
+async function callPerplexity(prompt: string): Promise<string> {
   const res = await withTimeout(
     fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
@@ -76,9 +76,7 @@ async function callPerplexity(prompt: string): Promise<{ text: string; citations
     }),
     TIMEOUT_MS
   );
-  const text = res.choices?.[0]?.message?.content ?? "";
-  const citations: string[] = res.citations ?? [];
-  return { text, citations };
+  return res.choices?.[0]?.message?.content ?? "";
 }
 
 async function callClaude(prompt: string): Promise<string> {
@@ -161,6 +159,20 @@ function scoreCompetitive(extracted: any): number {
   return 40;
 }
 
+function scorePositioning(extracted: any): number {
+  if (!extracted) return 15;
+  const s = extracted.positioning_strength;
+  const acc = extracted.positioning_accuracy ?? 1;
+  if (s === "confused") return 15;
+  if (s === "weak") return acc <= 2 ? 30 : 50;
+  if (s === "strong") {
+    if (acc <= 3) return 65;
+    if (acc === 4) return 80;
+    if (acc >= 5) return 92;
+  }
+  return 30;
+}
+
 function getScoreColor(score: number): string {
   if (score >= 70) return "#00ff87";
   if (score >= 45) return "#fbbf24";
@@ -172,6 +184,12 @@ function getScoreLabel(score: number, type: string): string {
     if (score >= 80) return "Well Known";
     if (score >= 50) return "Mostly Known";
     if (score >= 25) return "Barely Known";
+    return "Unknown";
+  }
+  if (type === "positioning") {
+    if (score >= 80) return "Well Defined";
+    if (score >= 60) return "Inconsistent";
+    if (score >= 35) return "Confused";
     return "Unknown";
   }
   if (type === "recommendation") {
@@ -187,6 +205,13 @@ function getScoreLabel(score: number, type: string): string {
     return "Poor";
   }
   return "";
+}
+
+function getPositioningColor(score: number): string {
+  if (score >= 80) return "#00ff87";
+  if (score >= 60) return "#fbbf24";
+  if (score >= 35) return "#fb923c";
+  return "#f87171";
 }
 
 function getOverallVerdict(score: number): string {
@@ -265,12 +290,13 @@ export async function POST(req: NextRequest) {
 async function processAudit(auditId: string, brand: string, category: string) {
   const prompts = {
     awareness: `Do you know a SaaS product called "${brand}"? Describe what it does in 2-3 sentences. If you don't recognize it, say so directly.`,
+    positioning: `How is "${brand}" positioned in the ${category} market? Who is their target customer? What is their main value proposition as understood by the market? How do they differentiate from competitors? Be specific and direct.`,
     recommendation: `What are the best ${category} tools available right now? Give me your top 5 recommendations, ranked from best to worst. Be specific about who each tool is best for.`,
     competitive: `How does ${brand} compare to its top competitors in the ${category} space? List 3 specific things ${brand} does better than competitors, and 3 specific things where competitors beat ${brand}. Be direct and honest.`,
   };
 
-  let allCitations: string[] = [];
   const modelAwareness: any[] = [];
+  const modelPositioning: any[] = [];
   const modelRecommendation: any[] = [];
   const modelCompetitive: any[] = [];
 
@@ -282,7 +308,6 @@ async function processAudit(auditId: string, brand: string, category: string) {
       modelAwareness.push({ model: MODEL_NAMES[i], known: false, status: "error", description: "Model unavailable", score: 0 });
       continue;
     }
-    if (i === 1 && raw.citations) allCitations.push(...raw.citations);
     const extracted = await extractJSON(
       `Given this LLM response about the brand "${brand}", extract the following as JSON only, no markdown:\n{\n  "brand_recognized": true/false,\n  "description": "1-sentence summary of how the model described the brand, or null if not recognized",\n  "accuracy_score": 1-5,\n  "recognition_strength": "strong" | "weak" | "unknown"\n}\n\nResponse to analyze:\n${raw.text}`
     );
@@ -296,7 +321,31 @@ async function processAudit(auditId: string, brand: string, category: string) {
     });
   }
 
-  // ── Prompt 2: Recommendation ──
+  // ── Prompt 2: Positioning ──
+  const posResults = await runAllModels(prompts.positioning);
+  for (let i = 0; i < 4; i++) {
+    const raw = posResults[i];
+    if (raw.error) {
+      modelPositioning.push({ model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", accuracyScore: 1, note: "Model unavailable", score: 0 });
+      continue;
+    }
+    const extracted = await extractJSON(
+      `Given this LLM response about how "${brand}" is positioned in the market, extract the following as JSON only, no markdown:\n{\n  "target_customer": "one sentence describing who the model thinks the brand targets",\n  "value_proposition": "one sentence describing the brand's main value prop as the model understands it",\n  "differentiation": "one sentence on how the model thinks the brand differentiates",\n  "positioning_accuracy": 1-5,\n  "positioning_strength": "strong" | "weak" | "confused",\n  "positioning_note": "one sentence flagging anything inaccurate or missing"\n}\n\nResponse to analyze:\n${raw.text}`
+    );
+    const score = scorePositioning(extracted);
+    modelPositioning.push({
+      model: MODEL_NAMES[i],
+      strength: extracted?.positioning_strength ?? "confused",
+      targetCustomer: extracted?.target_customer ?? "",
+      valueProp: extracted?.value_proposition ?? "",
+      differentiation: extracted?.differentiation ?? "",
+      accuracyScore: extracted?.positioning_accuracy ?? 1,
+      note: extracted?.positioning_note ?? "",
+      score,
+    });
+  }
+
+  // ── Prompt 3: Recommendation ──
   const recResults = await runAllModels(prompts.recommendation);
   for (let i = 0; i < 4; i++) {
     const raw = recResults[i];
@@ -304,7 +353,6 @@ async function processAudit(auditId: string, brand: string, category: string) {
       modelRecommendation.push({ model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [], fullList: [], score: 0 });
       continue;
     }
-    if (i === 1 && raw.citations) allCitations.push(...raw.citations);
     const extracted = await extractJSON(
       `Given this LLM response recommending ${category} tools, extract the following as JSON only, no markdown:\n{\n  "tools_mentioned": ["tool1", "tool2"],\n  "brand_position": null or integer (1-5),\n  "brand_mentioned": true/false,\n  "tools_above_brand": ["tool1"]\n}\n\nResponse to analyze:\n${raw.text}`
     );
@@ -319,7 +367,7 @@ async function processAudit(auditId: string, brand: string, category: string) {
     });
   }
 
-  // ── Prompt 3: Competitive ──
+  // ── Prompt 4: Competitive ──
   const compResults = await runAllModels(prompts.competitive);
   for (let i = 0; i < 4; i++) {
     const raw = compResults[i];
@@ -327,7 +375,6 @@ async function processAudit(auditId: string, brand: string, category: string) {
       modelCompetitive.push({ model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 });
       continue;
     }
-    if (i === 1 && raw.citations) allCitations.push(...raw.citations);
     const extracted = await extractJSON(
       `Given this LLM response comparing ${brand} to competitors, extract the following as JSON only, no markdown:\n{\n  "wins": ["win1", "win2", "win3"],\n  "losses": ["loss1", "loss2", "loss3"],\n  "sentiment": "positive" | "neutral" | "negative",\n  "sentiment_note": "one sentence explaining the overall tone"\n}\n\nResponse to analyze:\n${raw.text}`
     );
@@ -342,13 +389,14 @@ async function processAudit(auditId: string, brand: string, category: string) {
     });
   }
 
-  // ── Calculate scores ──
+  // ── Calculate scores (4 dimensions) ──
   const avgAwareness = average(modelAwareness.map((m) => m.score));
+  const avgPositioning = average(modelPositioning.map((m) => m.score));
   const avgRecommendation = average(modelRecommendation.map((m) => m.score));
   const avgCompetitive = average(modelCompetitive.map((m) => m.score));
 
   const perModelScores = MODEL_NAMES.map((_, i) => {
-    return average([modelAwareness[i].score, modelRecommendation[i].score, modelCompetitive[i].score]);
+    return average([modelAwareness[i].score, modelPositioning[i].score, modelRecommendation[i].score, modelCompetitive[i].score]);
   });
   const overallScore = Math.round(average(perModelScores));
   const overallVerdict = getOverallVerdict(overallScore);
@@ -367,46 +415,11 @@ async function processAudit(auditId: string, brand: string, category: string) {
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 5);
 
-  // ── Citation analysis ──
-  const domainCounts: Record<string, number> = {};
-  for (const url of allCitations) {
-    try {
-      const domain = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace("www.", "");
-      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
-    } catch { /* skip bad urls */ }
-  }
-  const topCitedSources = Object.entries(domainCounts)
-    .map(([domain, count]) => ({
-      url: domain,
-      domain: capitalizeFirst(domain.split(".")[0]),
-      yourCitations: count,
-      competitorCitations: Math.round(count * (3 + Math.random() * 10)),
-      status: count < 5 ? "danger" : count < 15 ? "warn" : "ok",
-    }))
-    .sort((a, b) => b.yourCitations - a.yourCitations)
-    .slice(0, 5);
-
   // ── Aggregate wins/losses ──
   const allWins = modelCompetitive.flatMap((m) => m.wins).filter(Boolean);
   const allLosses = modelCompetitive.flatMap((m) => m.losses).filter(Boolean);
   const topWins = [...new Set(allWins)].slice(0, 3);
   const topLosses = [...new Set(allLosses)].slice(0, 3);
-
-  // ── Source score (based on citation gaps) ──
-  const sourceScore = topCitedSources.length === 0
-    ? 30
-    : Math.round(Math.min(100, Math.max(10, topCitedSources.reduce((s, src) => s + (src.yourCitations / Math.max(src.competitorCitations, 1)) * 25, 0))));
-
-  // ── Fix priority via Claude ──
-  let fixPriority: any[] = [];
-  try {
-    fixPriority = await extractJSON(
-      `Based on this brand audit data for ${brand} in the ${category} space:\n- Overall score: ${overallScore}\n- Awareness: ${avgAwareness}\n- Recommendation rank: ${avgRecommendation}\n- Top cited sources from Perplexity: ${JSON.stringify(allCitations.slice(0, 10))}\n\nGenerate a prioritized list of 4 concrete actions to improve this brand's LLM visibility.\nFor each action return JSON only, no markdown:\n[{\n  "priority": 1,\n  "action": "specific action title",\n  "why": "one sentence explaining why this moves the needle",\n  "impact": "High" | "Medium",\n  "effort": "Low" | "Medium" | "High"\n}]`
-    );
-    if (!Array.isArray(fixPriority)) fixPriority = [];
-  } catch {
-    fixPriority = [];
-  }
 
   // ── Quadrant ──
   const quadrant = {
@@ -420,7 +433,27 @@ async function processAudit(auditId: string, brand: string, category: string) {
   const recInsight = generateRecInsight(modelRecommendation, brand);
   const compInsight = generateCompInsight(modelCompetitive, brand);
 
+  // ── Positioning insight via Claude ──
+  let positioningInsight = "";
+  try {
+    const res = await withTimeout(
+      getAnthropic().messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 200,
+        messages: [{
+          role: "user",
+          content: `Based on how 4 LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
+        }],
+      }),
+      TIMEOUT_MS
+    );
+    positioningInsight = res.content[0]?.type === "text" ? res.content[0].text : "";
+  } catch {
+    positioningInsight = `Mixed positioning signals across models for ${brand}.`;
+  }
+
   // ── Final result object ──
+  const posScore = Math.round(avgPositioning);
   const result = {
     brand,
     category,
@@ -441,6 +474,21 @@ async function processAudit(auditId: string, brand: string, category: string) {
       })),
       accuracyScore: parseFloat((modelAwareness.filter((m) => m.status !== "error").reduce((s, m) => s + (m.score / 18), 0) / Math.max(modelAwareness.filter((m) => m.status !== "error").length, 1)).toFixed(1)),
       accuracyFlag: awarenessInsight,
+    },
+    positioning: {
+      score: posScore,
+      label: getScoreLabel(posScore, "positioning"),
+      color: getPositioningColor(posScore),
+      modelResults: modelPositioning.map((m) => ({
+        model: m.model,
+        strength: m.strength,
+        targetCustomer: m.targetCustomer,
+        valueProp: m.valueProp,
+        differentiation: m.differentiation,
+        accuracyScore: m.accuracyScore,
+        note: m.note,
+      })),
+      insight: positioningInsight,
     },
     recommendation: {
       score: Math.round(avgRecommendation),
@@ -472,14 +520,6 @@ async function processAudit(auditId: string, brand: string, category: string) {
       overallSentiment: getMajoritySentiment(modelCompetitive),
       insight: compInsight,
     },
-    sources: {
-      score: sourceScore,
-      label: getScoreLabel(sourceScore, "competitive"),
-      color: getScoreColor(sourceScore),
-      topCitedSources,
-      missingSources: generateMissingSources(topCitedSources),
-      fixPriority,
-    },
   };
 
   // Step 7 — Save to Supabase
@@ -496,10 +536,10 @@ async function processAudit(auditId: string, brand: string, category: string) {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-async function runAllModels(prompt: string): Promise<Array<{ text: string; citations?: string[]; error?: boolean }>> {
+async function runAllModels(prompt: string): Promise<Array<{ text: string; error?: boolean }>> {
   const results = await Promise.all([
     callOpenAI(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
-    callPerplexity(prompt).then((r) => ({ text: r.text, citations: r.citations })).catch(() => ({ text: "", error: true as const })),
+    callPerplexity(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
     callClaude(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
     callGemini(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
   ]);
@@ -570,12 +610,3 @@ function generateCompInsight(models: any[], brand: string): string {
   return parts.join(" ");
 }
 
-function generateMissingSources(topSources: any[]): any[] {
-  const highValueDomains = [
-    { domain: "ProductHunt", reason: "High citation rate in Perplexity for SaaS tools. A strong ProductHunt presence drives organic recommendations." },
-    { domain: "Zapier Blog", reason: "Integration content is heavily cited by AI models. Zapier tool comparisons appear in 60%+ of category queries." },
-    { domain: "HubSpot Blog", reason: "HubSpot's comparison content drives significant citation share across GPT-4o and Perplexity." },
-  ];
-  const existingDomains = new Set(topSources.map((s) => s.domain.toLowerCase()));
-  return highValueDomains.filter((d) => !existingDomains.has(d.domain.toLowerCase()));
-}
