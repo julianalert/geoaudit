@@ -8,6 +8,7 @@ export default function Home() {
   const [category, setCategory] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [loading, setLoading] = useState(false);
+
   const router = useRouter();
 
   async function handleSubmit() {
@@ -133,8 +134,7 @@ export default function Home() {
             marginBottom: 16,
           }}
         >
-          ARE YOU <span style={{ color: "#3b82f6" }}> SHOWING UP </span>
-           IN AI ANSWERS? 
+          ARE YOU <span style={{ color: "#3b82f6" }}> SHOWING UP </span> IN AI ANSWERS? 
         </p>
 
         {/* Subheading */}
