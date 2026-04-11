@@ -6,17 +6,18 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const [brand, setBrand] = useState("");
   const [category, setCategory] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   async function handleSubmit() {
-    if (!brand.trim() || !category.trim() || loading) return;
+    if (!brand.trim() || !category.trim() || !websiteUrl.trim() || loading) return;
     setLoading(true);
     try {
       const res = await fetch("/api/run-audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand: brand.trim(), category: category.trim() }),
+        body: JSON.stringify({ brand: brand.trim(), category: category.trim(), websiteUrl: websiteUrl.trim() }),
       });
       const data = await res.json();
       if (data.id) {
@@ -105,20 +106,22 @@ export default function Home() {
               animation: "pulse-dot 2.5s ease infinite",
             }}
           />
-          <span
+          <h1
             style={{
               fontFamily: "'Space Mono', monospace",
               fontSize: 10,
               letterSpacing: "0.2em",
               color: "#6b7a99",
+              fontWeight: "normal",
+              margin: 0,
             }}
           >
-            NOT ANOTHER MARKETER — GEO AUDIT v1.0
-          </span>
+            FREE GEO AUDIT TOOL v1.0
+          </h1>
         </div>
 
-        {/* H1 */}
-        <h1
+        {/* Display heading */}
+        <p
           className="fade"
           style={{
             fontFamily: "'Syne', sans-serif",
@@ -130,10 +133,9 @@ export default function Home() {
             marginBottom: 16,
           }}
         >
-          LLM VISIBILITY
-          <br />
-          <span style={{ color: "#00ff87" }}>AUDIT TOOL</span>
-        </h1>
+          Are You
+          <span style={{ color: "#00ff87" }}> Showing Up </span> in AI Answers?
+        </p>
 
         {/* Subheading */}
         <p
@@ -238,9 +240,44 @@ export default function Home() {
             </div>
           </div>
 
+          <div style={{ marginBottom: 14 }}>
+            <label
+              style={{
+                display: "block",
+                fontFamily: "'Space Mono', monospace",
+                fontSize: 10,
+                letterSpacing: "0.15em",
+                color: "#6b7a99",
+                marginBottom: 8,
+              }}
+            >
+              WEBSITE URL
+            </label>
+            <input
+              value={websiteUrl}
+              onChange={(e) => setWebsiteUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+              placeholder="e.g. https://yoursite.com"
+              style={{
+                width: "100%",
+                background: "#12121a",
+                border: "1px solid #2a2a40",
+                color: "#e2e8f0",
+                padding: "13px 16px",
+                fontFamily: "'Inter', sans-serif",
+                fontSize: 15,
+                outline: "none",
+                borderRadius: 6,
+                transition: "border-color 0.2s",
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "#00ff8780")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "#2a2a40")}
+            />
+          </div>
+
           <button
             onClick={handleSubmit}
-            disabled={loading || !brand.trim() || !category.trim()}
+            disabled={loading || !brand.trim() || !category.trim() || !websiteUrl.trim()}
             style={{
               background: loading ? "#1e1e30" : "#00ff87",
               color: loading ? "#6b7a99" : "#0a0a0f",

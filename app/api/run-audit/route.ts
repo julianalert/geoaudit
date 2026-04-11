@@ -251,16 +251,16 @@ const MODEL_NAMES = ["GPT-4o", "Perplexity", "Claude", "Gemini"] as const;
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { brand, category } = body;
+    const { brand, category, websiteUrl } = body;
 
-    if (!brand || !category) {
-      return NextResponse.json({ error: "Missing brand or category" }, { status: 400 });
+    if (!brand || !category || !websiteUrl) {
+      return NextResponse.json({ error: "Missing brand, category, or website URL" }, { status: 400 });
     }
 
     // Step 1 — Create pending row
     const { data: row, error: insertErr } = await getSupabase()
       .from("audits")
-      .insert({ brand, category, overall_score: 0, overall_verdict: "pending", status: "pending" })
+      .insert({ brand, category, website_url: websiteUrl, overall_score: 0, overall_verdict: "pending", status: "pending" })
       .select("id")
       .single();
 
