@@ -747,7 +747,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </span>
 
               <button
-                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                onClick={() => {}}
                 style={{
                   background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
@@ -894,7 +894,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </span>
 
               <button
-                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                onClick={() => {}}
                 style={{
                   background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
@@ -1021,7 +1021,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </span>
 
               <button
-                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                onClick={() => {}}
                 style={{
                   background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
@@ -1126,7 +1126,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </span>
 
               <button
-                onClick={() => window.open("https://notanothermarketer.com/geo-upgrade", "_blank")}
+                onClick={() => {}}
                 style={{
                   background: "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
