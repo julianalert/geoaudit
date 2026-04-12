@@ -149,7 +149,7 @@ export default function Home() {
           }}
         >
           Find out if AI models know your brand, describe you accurately, and
-          recommend you when buyers ask.
+          recommend you when buyers ask. < br /> Get a tailored action plan to improve your visibility across AI search.
         </p>
 
         {/* Inputs */}

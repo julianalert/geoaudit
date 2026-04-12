@@ -63,7 +63,7 @@ async function callPerplexity(prompt: string): Promise<string> {
         Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama-3.1-sonar-large-128k-online",
+        model: "sonar-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
@@ -93,7 +93,7 @@ async function callClaude(prompt: string): Promise<string> {
 }
 
 async function callGemini(prompt: string): Promise<string> {
-  const model = getGenAI().getGenerativeModel({ model: "gemini-1.5-pro" });
+  const model = getGenAI().getGenerativeModel({ model: "gemini-2.5-flash" });
   const res = await withTimeout(
     model.generateContent({
       contents: [{ role: "user", parts: [{ text: `${SYSTEM_PROMPT}\n\n${prompt}` }] }],
