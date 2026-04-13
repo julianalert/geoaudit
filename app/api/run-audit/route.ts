@@ -4,7 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 let _anthropic: Anthropic | null = null;
 let _openai: OpenAI | null = null;
@@ -315,99 +315,66 @@ async function processAudit(auditId: string, brand: string, category: string) {
     competitive: `How does ${brand} compare to its top competitors in the ${categoryBase} space? List 3 specific things ${brand} does better than competitors, and 3 specific things where competitors beat ${brand}. Be direct and honest.`,
   };
 
-  const modelAwareness: any[] = [];
-  const modelPositioning: any[] = [];
-  const modelRecommendation: any[] = [];
-  const modelCompetitive: any[] = [];
+  // ── Run all 4 prompts in parallel ──
+  const [awarenessResults, posResults, recResults, compResults] = await Promise.all([
+    runAllModels(prompts.awareness),
+    runAllModels(prompts.positioning),
+    runAllModels(prompts.recommendation),
+    runAllModels(prompts.competitive),
+  ]);
 
-  // ── Prompt 1: Awareness ──
-  const awarenessResults = await runAllModels(prompts.awareness);
-  for (let i = 0; i < 4; i++) {
-    const raw = awarenessResults[i];
-    if (raw.error) {
-      modelAwareness.push({ model: MODEL_NAMES[i], known: false, status: "error", description: "Model unavailable", score: 0 });
-      continue;
-    }
-    const extracted = await extractJSON(
-      `Given this LLM response about the brand "${brand}", extract the following as JSON only, no markdown:\n{\n  "brand_recognized": true/false,\n  "description": "1-sentence summary of how the model described the brand, or null if not recognized",\n  "accuracy_score": 1-5,\n  "recognition_strength": "strong" | "weak" | "unknown"\n}\n\nResponse to analyze:\n${raw.text}`
-    );
+  // ── Extract all 16 responses in parallel ──
+  const [awarenessExtractions, posExtractions, recExtractions, compExtractions] = await Promise.all([
+    Promise.all(awarenessResults.map((raw) =>
+      raw.error ? Promise.resolve(null) : extractJSON(
+        `Given this LLM response about the brand "${brand}", extract the following as JSON only, no markdown:\n{\n  "brand_recognized": true/false,\n  "description": "1-sentence summary of how the model described the brand, or null if not recognized",\n  "accuracy_score": 1-5,\n  "recognition_strength": "strong" | "weak" | "unknown"\n}\n\nResponse to analyze:\n${raw.text}`
+      )
+    )),
+    Promise.all(posResults.map((raw) =>
+      raw.error ? Promise.resolve(null) : extractJSON(
+        `Given this LLM response about how "${brand}" is positioned in the market, extract the following as JSON only, no markdown:\n{\n  "target_customer": "one sentence describing who the model thinks the brand targets",\n  "value_proposition": "one sentence describing the brand's main value prop as the model understands it",\n  "differentiation": "one sentence on how the model thinks the brand differentiates",\n  "positioning_accuracy": 1-5,\n  "positioning_strength": "strong" | "weak" | "confused",\n  "positioning_note": "one sentence flagging anything inaccurate or missing"\n}\n\nResponse to analyze:\n${raw.text}`
+      )
+    )),
+    Promise.all(recResults.map((raw) =>
+      raw.error ? Promise.resolve(null) : extractJSON(
+        `Given this LLM response recommending ${categoryBase} tools, extract the following as JSON only, no markdown:\n{\n  "tools_mentioned": ["tool1", "tool2"],\n  "brand_position": null or integer (1-5),\n  "brand_mentioned": true/false,\n  "tools_above_brand": ["tool1"]\n}\n\nResponse to analyze:\n${raw.text}`
+      )
+    )),
+    Promise.all(compResults.map((raw) =>
+      raw.error ? Promise.resolve(null) : extractJSON(
+        `Given this LLM response comparing ${brand} to competitors, extract the following as JSON only, no markdown:\n{\n  "wins": ["win1", "win2", "win3"],\n  "losses": ["loss1", "loss2", "loss3"],\n  "sentiment": "positive" | "neutral" | "negative",\n  "sentiment_note": "one sentence explaining the overall tone"\n}\n\nResponse to analyze:\n${raw.text}`
+      )
+    )),
+  ]);
+
+  // ── Build model result arrays ──
+  const modelAwareness: any[] = awarenessResults.map((raw, i) => {
+    if (raw.error) return { model: MODEL_NAMES[i], known: false, status: "error", description: "Model unavailable", score: 0 };
+    const extracted = awarenessExtractions[i];
     const score = scoreAwareness(extracted);
-    modelAwareness.push({
-      model: MODEL_NAMES[i],
-      known: extracted?.brand_recognized ?? false,
-      status: extracted?.recognition_strength ?? "unknown",
-      description: extracted?.description ?? raw.text.slice(0, 200),
-      score,
-    });
-  }
+    return { model: MODEL_NAMES[i], known: extracted?.brand_recognized ?? false, status: extracted?.recognition_strength ?? "unknown", description: extracted?.description ?? raw.text.slice(0, 200), score };
+  });
 
-  // ── Prompt 2: Positioning ──
-  const posResults = await runAllModels(prompts.positioning);
-  for (let i = 0; i < 4; i++) {
-    const raw = posResults[i];
-    if (raw.error) {
-      modelPositioning.push({ model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", accuracyScore: 1, note: "Model unavailable", score: 0 });
-      continue;
-    }
-    const extracted = await extractJSON(
-      `Given this LLM response about how "${brand}" is positioned in the market, extract the following as JSON only, no markdown:\n{\n  "target_customer": "one sentence describing who the model thinks the brand targets",\n  "value_proposition": "one sentence describing the brand's main value prop as the model understands it",\n  "differentiation": "one sentence on how the model thinks the brand differentiates",\n  "positioning_accuracy": 1-5,\n  "positioning_strength": "strong" | "weak" | "confused",\n  "positioning_note": "one sentence flagging anything inaccurate or missing"\n}\n\nResponse to analyze:\n${raw.text}`
-    );
+  const modelPositioning: any[] = posResults.map((raw, i) => {
+    if (raw.error) return { model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", accuracyScore: 1, note: "Model unavailable", score: 0 };
+    const extracted = posExtractions[i];
     const score = scorePositioning(extracted);
-    modelPositioning.push({
-      model: MODEL_NAMES[i],
-      strength: extracted?.positioning_strength ?? "confused",
-      targetCustomer: extracted?.target_customer ?? "",
-      valueProp: extracted?.value_proposition ?? "",
-      differentiation: extracted?.differentiation ?? "",
-      accuracyScore: extracted?.positioning_accuracy ?? 1,
-      note: extracted?.positioning_note ?? "",
-      score,
-    });
-  }
+    return { model: MODEL_NAMES[i], strength: extracted?.positioning_strength ?? "confused", targetCustomer: extracted?.target_customer ?? "", valueProp: extracted?.value_proposition ?? "", differentiation: extracted?.differentiation ?? "", accuracyScore: extracted?.positioning_accuracy ?? 1, note: extracted?.positioning_note ?? "", score };
+  });
 
-  // ── Prompt 3: Recommendation ──
-  const recResults = await runAllModels(prompts.recommendation);
-  for (let i = 0; i < 4; i++) {
-    const raw = recResults[i];
-    if (raw.error) {
-      modelRecommendation.push({ model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [], fullList: [], score: 0 });
-      continue;
-    }
-    const extracted = await extractJSON(
-      `Given this LLM response recommending ${category} tools, extract the following as JSON only, no markdown:\n{\n  "tools_mentioned": ["tool1", "tool2"],\n  "brand_position": null or integer (1-5),\n  "brand_mentioned": true/false,\n  "tools_above_brand": ["tool1"]\n}\n\nResponse to analyze:\n${raw.text}`
-    );
+  const modelRecommendation: any[] = recResults.map((raw, i) => {
+    if (raw.error) return { model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [], fullList: [], score: 0 };
+    const extracted = recExtractions[i];
     const score = scoreRecommendation(extracted);
-    modelRecommendation.push({
-      model: MODEL_NAMES[i],
-      rank: extracted?.brand_position ?? null,
-      listed: extracted?.brand_mentioned ?? false,
-      aboveYou: extracted?.tools_above_brand ?? [],
-      fullList: extracted?.tools_mentioned ?? [],
-      score,
-    });
-  }
+    return { model: MODEL_NAMES[i], rank: extracted?.brand_position ?? null, listed: extracted?.brand_mentioned ?? false, aboveYou: extracted?.tools_above_brand ?? [], fullList: extracted?.tools_mentioned ?? [], score };
+  });
 
-  // ── Prompt 4: Competitive ──
-  const compResults = await runAllModels(prompts.competitive);
-  for (let i = 0; i < 4; i++) {
-    const raw = compResults[i];
-    if (raw.error) {
-      modelCompetitive.push({ model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 });
-      continue;
-    }
-    const extracted = await extractJSON(
-      `Given this LLM response comparing ${brand} to competitors, extract the following as JSON only, no markdown:\n{\n  "wins": ["win1", "win2", "win3"],\n  "losses": ["loss1", "loss2", "loss3"],\n  "sentiment": "positive" | "neutral" | "negative",\n  "sentiment_note": "one sentence explaining the overall tone"\n}\n\nResponse to analyze:\n${raw.text}`
-    );
+  const modelCompetitive: any[] = compResults.map((raw, i) => {
+    if (raw.error) return { model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 };
+    const extracted = compExtractions[i];
     const score = scoreCompetitive(extracted);
-    modelCompetitive.push({
-      model: MODEL_NAMES[i],
-      sentiment: extracted?.sentiment ?? "neutral",
-      note: extracted?.sentiment_note ?? "",
-      wins: extracted?.wins ?? [],
-      losses: extracted?.losses ?? [],
-      score,
-    });
-  }
+    return { model: MODEL_NAMES[i], sentiment: extracted?.sentiment ?? "neutral", note: extracted?.sentiment_note ?? "", wins: extracted?.wins ?? [], losses: extracted?.losses ?? [], score };
+  });
 
   // ── Calculate scores (4 dimensions) ──
   const avgAwareness = average(modelAwareness.map((m) => m.score));
