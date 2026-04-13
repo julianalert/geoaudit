@@ -866,7 +866,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                   background: "#fbbf2415", border: "1px solid #fbbf2430",
                   padding: "4px 14px", borderRadius: 4, marginBottom: 16,
                 }}>
-                  ONE-TIME · $17
+                  ONE-TIME · $1
                 </span>
                 <button
                   onClick={handleUnlock}
@@ -1067,7 +1067,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                   background: "#fbbf2415", border: "1px solid #fbbf2430",
                   padding: "4px 14px", borderRadius: 4, marginBottom: 16,
                 }}>
-                  ONE-TIME · $17
+                  ONE-TIME · $1
                 </span>
                 <button
                   onClick={handleUnlock}
@@ -1209,7 +1209,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                   background: "#fbbf2415", border: "1px solid #fbbf2430",
                   padding: "4px 14px", borderRadius: 4, marginBottom: 16,
                 }}>
-                  ONE-TIME · $17
+                  ONE-TIME · $1
                 </span>
                 <button
                   onClick={handleUnlock}
@@ -1349,7 +1349,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                 background: "#fbbf2415", border: "1px solid #fbbf2430",
                 padding: "4px 14px", borderRadius: 4, marginBottom: 16,
               }}>
-                ONE-TIME · $17
+                ONE-TIME · $1
               </span>
 
               <button

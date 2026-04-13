@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       {
         price_data: {
           currency: "usd",
-          unit_amount: 1700, // $17.00
+          unit_amount: 100, // $1.00
           product_data: {
             name: "GEO Audit Full Report",
             description: `Full LLM visibility report for ${audit.brand} — recommendation rank, competitive context, source attribution & 30-day fix roadmap.`,
