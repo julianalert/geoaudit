@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -76,6 +76,26 @@ interface AuditResult {
     overallSentiment: string;
     insight: string;
   };
+  sourceAttribution?: {
+    sources: Array<{
+      domain: string;
+      status: "strong" | "weak" | "missing";
+      note: string;
+      priority: "high" | "medium" | "low";
+    }>;
+    insight: string;
+  } | null;
+  roadmap?: {
+    weeks: Array<{
+      week: string;
+      actions: Array<{
+        action: string;
+        impact: "High" | "Medium" | "Low";
+        category: string;
+      }>;
+    }>;
+    insight: string;
+  } | null;
 }
 
 interface AuditRow {
@@ -85,6 +105,7 @@ interface AuditRow {
   brand: string;
   category: string;
   website_url: string | null;
+  unlocked: boolean;
 }
 
 // ── Shared Components ────────────────────────────────────────
@@ -355,10 +376,33 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 
 // ── Full Results ─────────────────────────────────────────────
 
-function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: string | null }) {
+function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult; websiteUrl: string | null; unlocked: boolean; auditId: string }) {
   const [copied, setCopied] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+
+  async function handleUnlock() {
+    if (checkingOut) return;
+    setCheckingOut(true);
+    try {
+      const res = await fetch("/api/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auditId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error("Checkout error:", data.error);
+        setCheckingOut(false);
+      }
+    } catch (err) {
+      console.error("Checkout request failed:", err);
+      setCheckingOut(false);
+    }
+  }
 
   function handleCopy() {
     navigator.clipboard.writeText(shareUrl);
@@ -670,11 +714,10 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
         </div>
       )}
 
-      {/* Card 3: Recommendation Rank (Locked) */}
+      {/* Card 3: Recommendation Rank */}
       <div className="fade" style={{ marginBottom: 28 }}>
         <SectionLabel>03 — RECOMMENDATION RANK</SectionLabel>
         <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
-          {/* Card header (visible above blur) */}
           <div style={{ padding: "24px 28px 0" }}>
             <div
               style={{
@@ -686,33 +729,28 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Recommendation Rank</span>
-                  <span style={{
-                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
-                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
-                  }}>
-                    🔒 LOCKED
-                  </span>
+                  {!unlocked && (
+                    <span style={{
+                      fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                      background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                    }}>
+                      🔒 LOCKED
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: "#6b7a99" }}>Do you appear when buyers search for your category?</div>
               </div>
             </div>
           </div>
 
-          {/* Blurred + overlay container */}
-          <div style={{ position: "relative", overflow: "hidden" }}>
-            {/* Blurred fake content */}
-            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+          {unlocked ? (
+            <div style={{ padding: "0 28px 28px" }}>
               <div style={{ marginBottom: 16, padding: "10px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6 }}>
                 <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99" }}>PROMPT USED &nbsp;</span>
-                <span style={{ fontSize: 13, color: "#8892aa", fontStyle: "italic" }}>&ldquo;What are the best project management tools available right now?&rdquo;</span>
+                <span style={{ fontSize: 13, color: "#8892aa", fontStyle: "italic" }}>&ldquo;{d.recommendation.promptUsed}&rdquo;</span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
-                {[
-                  { model: "GPT-4o", rank: 2, listed: true },
-                  { model: "Perplexity", rank: null, listed: false },
-                  { model: "Claude", rank: 3, listed: true },
-                  { model: "Gemini", rank: 1, listed: true },
-                ].map((m, i) => (
+                {d.recommendation.modelResults.map((m, i) => (
                   <div key={i} style={{ padding: 14, background: "#0a0a14", border: `1px solid ${m.listed ? "#fbbf2425" : "#f8717130"}`, borderRadius: 8, textAlign: "center" }}>
                     <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#6b7a99", marginBottom: 8 }}>{m.model}</div>
                     {m.listed ? (
@@ -726,21 +764,20 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                         <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
                       </>
                     )}
+                    {m.aboveYou.length > 0 && (
+                      <div style={{ marginTop: 8, fontSize: 10, color: "#6b7a99", lineHeight: 1.4 }}>
+                        Above you: {m.aboveYou.join(", ")}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>SHARE OF VOICE — ALL MODELS</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {[
-                    { name: "Competitor A", pct: 34 },
-                    { name: "Your Brand", pct: 22 },
-                    { name: "Competitor B", pct: 18 },
-                    { name: "Competitor C", pct: 14 },
-                    { name: "Others", pct: 12 },
-                  ].map((item, i) => (
+                  {d.recommendation.shareOfVoice.map((item, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 12, color: "#8892aa", width: 70, flexShrink: 0 }}>{item.name}</span>
+                      <span style={{ fontSize: 12, color: item.name.toLowerCase() === d.brand.toLowerCase() ? "#dce4f5" : "#8892aa", width: 120, flexShrink: 0 }}>{item.name}</span>
                       <div style={{ flex: 1, height: 4, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
                         <div style={{ width: `${item.pct}%`, height: "100%", background: sovColors[i] || "#3a4060", borderRadius: 2 }} />
                       </div>
@@ -749,70 +786,116 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                   ))}
                 </div>
               </div>
-              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
-                <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Your brand is invisible on 2 out of 4 models. Competitors are capturing buyer intent you should own.</p>
-              </div>
+              <InsightBox>{d.recommendation.insight}</InsightBox>
             </div>
-
-            {/* Gradient overlay with CTA */}
-            <div
-              style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
-                padding: "40px 32px",
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-
-              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
-                Are you showing up when buyers search for your category?
+          ) : (
+            <div style={{ position: "relative", overflow: "hidden" }}>
+              <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+                <div style={{ marginBottom: 16, padding: "10px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6 }}>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99" }}>PROMPT USED &nbsp;</span>
+                  <span style={{ fontSize: 13, color: "#8892aa", fontStyle: "italic" }}>&ldquo;What are the best {d.category} tools available right now?&rdquo;</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 20 }}>
+                  {[
+                    { model: "GPT-4o", rank: 2, listed: true },
+                    { model: "Perplexity", rank: null, listed: false },
+                    { model: "Claude", rank: 3, listed: true },
+                    { model: "Gemini", rank: 1, listed: true },
+                  ].map((m, i) => (
+                    <div key={i} style={{ padding: 14, background: "#0a0a14", border: `1px solid ${m.listed ? "#fbbf2425" : "#f8717130"}`, borderRadius: 8, textAlign: "center" }}>
+                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#6b7a99", marginBottom: 8 }}>{m.model}</div>
+                      {m.listed ? (
+                        <>
+                          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
+                          <div style={{ fontSize: 11, color: "#6b7a99", marginTop: 4 }}>of 5 listed</div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>—</div>
+                          <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>SHARE OF VOICE — ALL MODELS</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[
+                      { name: "Competitor A", pct: 34 },
+                      { name: "Your Brand", pct: 22 },
+                      { name: "Competitor B", pct: 18 },
+                      { name: "Competitor C", pct: 14 },
+                      { name: "Others", pct: 12 },
+                    ].map((item, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, color: "#8892aa", width: 70, flexShrink: 0 }}>{item.name}</span>
+                        <div style={{ flex: 1, height: 4, background: "#1e1e30", borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{ width: `${item.pct}%`, height: "100%", background: sovColors[i] || "#3a4060", borderRadius: 2 }} />
+                        </div>
+                        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: sovColors[i] || "#3a4060", width: 36, textAlign: "right" }}>{item.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+                  <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Your brand is invisible on 2 out of 4 models. Competitors are capturing buyer intent you should own.</p>
+                </div>
               </div>
-
-              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
-                Unlock your full Recommendation Rank report. See exactly where each LLM ranks you, who's above you, and your share of voice vs competitors.
-              </div>
-
-              <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
-                background: "#fbbf2415", border: "1px solid #fbbf2430",
-                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
-              }}>
-                ONE-TIME · $17
-              </span>
-
-              <button
-                onClick={() => {}}
+              <div
                 style={{
-                  background: "#fbbf24", color: "#0a0a0f", border: "none",
-                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
-                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
-                  cursor: "pointer", borderRadius: 6,
-                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  position: "absolute", inset: 0,
+                  background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                  padding: "40px 32px",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
-                UNLOCK FULL REPORT →
-              </button>
-
-              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                  Are you showing up when buyers search for your category?
+                </div>
+                <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                  Unlock your full Recommendation Rank report. See exactly where each LLM ranks you, who&apos;s above you, and your share of voice vs competitors.
+                </div>
+                <span style={{
+                  fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                  background: "#fbbf2415", border: "1px solid #fbbf2430",
+                  padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+                }}>
+                  ONE-TIME · $17
+                </span>
+                <button
+                  onClick={handleUnlock}
+                  disabled={checkingOut}
+                  style={{
+                    background: checkingOut ? "#6b7a99" : "#fbbf24", color: "#0a0a0f", border: "none",
+                    padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                    fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                    cursor: checkingOut ? "not-allowed" : "pointer", borderRadius: 6,
+                    transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                >
+                  {checkingOut ? "REDIRECTING…" : "UNLOCK FULL REPORT →"}
+                </button>
+                <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                  Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Card 4: Competitive Context (Locked) */}
+      {/* Card 4: Competitive Context */}
       <div className="fade" style={{ marginBottom: 28 }}>
         <SectionLabel>04 — COMPETITIVE CONTEXT</SectionLabel>
         <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
-          {/* Card header (visible above blur) */}
           <div style={{ padding: "24px 28px 0" }}>
             <div
               style={{
@@ -824,43 +907,47 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Competitive Context</span>
-                  <span style={{
-                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
-                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
-                  }}>
-                    🔒 LOCKED
-                  </span>
+                  {!unlocked && (
+                    <span style={{
+                      fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                      background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                    }}>
+                      🔒 LOCKED
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: "#6b7a99" }}>How do models compare you to your top competitors?</div>
               </div>
             </div>
           </div>
 
-          {/* Blurred + overlay container */}
-          <div style={{ position: "relative", overflow: "hidden" }}>
-            {/* Blurred fake content */}
-            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+          {unlocked ? (
+            <div style={{ padding: "0 28px 28px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
                 <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 8 }}>
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", marginBottom: 12 }}>WHERE YOU WIN</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {["Ease of onboarding", "Customer support quality", "Pricing flexibility"].map((w, i) => (
+                    {d.competitive.wins.length > 0 ? d.competitive.wins.map((w, i) => (
                       <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <span style={{ color: "#3b82f6", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
                         <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{w}</span>
                       </div>
-                    ))}
+                    )) : (
+                      <span style={{ fontSize: 13, color: "#6b7a99" }}>No clear wins identified by models.</span>
+                    )}
                   </div>
                 </div>
                 <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 8 }}>
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>WHERE YOU LOSE</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {["Enterprise feature depth", "Integration ecosystem", "Brand recognition"].map((l, i) => (
+                    {d.competitive.losses.length > 0 ? d.competitive.losses.map((l, i) => (
                       <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                         <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
                         <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{l}</span>
                       </div>
-                    ))}
+                    )) : (
+                      <span style={{ fontSize: 13, color: "#6b7a99" }}>No clear losses identified by models.</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -875,12 +962,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                     </tr>
                   </thead>
                   <tbody>
-                    {[
-                      { model: "GPT-4o", sentiment: "positive", note: "Positions brand favorably vs market leader." },
-                      { model: "Perplexity", sentiment: "neutral", note: "Acknowledges strengths but notes gaps." },
-                      { model: "Claude", sentiment: "positive", note: "Highlights differentiated positioning." },
-                      { model: "Gemini", sentiment: "negative", note: "Flags competitor advantages in enterprise." },
-                    ].map((row, i) => {
+                    {d.competitive.sentimentPerModel.map((row, i) => {
                       const sColors: Record<string, string> = { positive: "#3b82f6", neutral: "#fbbf24", negative: "#f87171" };
                       const c = sColors[row.sentiment] || "#6b7a99";
                       return (
@@ -896,70 +978,125 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
                   </tbody>
                 </table>
               </div>
-              <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
-                <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Models have a mixed view of your brand vs competitors. Enterprise positioning is the biggest gap to close.</p>
-              </div>
+              <InsightBox>{d.competitive.insight}</InsightBox>
             </div>
-
-            {/* Gradient overlay with CTA */}
-            <div
-              style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
-                padding: "40px 32px",
-              }}
-            >
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-
-              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
-                How does your brand stack up against competitors in AI?
+          ) : (
+            <div style={{ position: "relative", overflow: "hidden" }}>
+              <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+                  <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 8 }}>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", marginBottom: 12 }}>WHERE YOU WIN</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {["Ease of onboarding", "Customer support quality", "Pricing flexibility"].map((w, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span style={{ color: "#3b82f6", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
+                          <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ padding: "14px 16px", background: "#0a0a14", border: "1px solid #f8717120", borderRadius: 8 }}>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>WHERE YOU LOSE</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {["Enterprise feature depth", "Integration ecosystem", "Brand recognition"].map((l, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
+                          <span style={{ fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{l}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>SENTIMENT PER MODEL</div>
+                  <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                    <thead>
+                      <tr>
+                        {["MODEL", "SENTIMENT", "NOTE"].map((h) => (
+                          <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { model: "GPT-4o", sentiment: "positive", note: "Positions brand favorably vs market leader." },
+                        { model: "Perplexity", sentiment: "neutral", note: "Acknowledges strengths but notes gaps." },
+                        { model: "Claude", sentiment: "positive", note: "Highlights differentiated positioning." },
+                        { model: "Gemini", sentiment: "negative", note: "Flags competitor advantages in enterprise." },
+                      ].map((row, i) => {
+                        const sColors: Record<string, string> = { positive: "#3b82f6", neutral: "#fbbf24", negative: "#f87171" };
+                        const c = sColors[row.sentiment] || "#6b7a99";
+                        return (
+                          <tr key={i}>
+                            <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.model}</td>
+                            <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>
+                              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>{row.sentiment}</span>
+                            </td>
+                            <td style={{ fontSize: 13, color: "#8892aa", padding: "10px 0 10px 12px", borderTop: "1px solid #1e1e30", verticalAlign: "top" }}>{row.note}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ marginTop: 16, padding: "12px 16px", background: "#0a0a14", border: "1px solid #3b82f620", borderRadius: 6, borderLeft: "3px solid #3b82f6" }}>
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", display: "block", marginBottom: 5 }}>▸ KEY INSIGHT</span>
+                  <p style={{ fontSize: 13, color: "#8892aa", margin: 0, lineHeight: 1.6 }}>Models have a mixed view of your brand vs competitors. Enterprise positioning is the biggest gap to close.</p>
+                </div>
               </div>
-
-              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
-                Unlock your full Competitive Context report. See where each LLM thinks you win and lose, sentiment breakdowns per model, and the gaps your competitors are exploiting.
-              </div>
-
-              <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
-                background: "#fbbf2415", border: "1px solid #fbbf2430",
-                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
-              }}>
-                ONE-TIME · $17
-              </span>
-
-              <button
-                onClick={() => {}}
+              <div
                 style={{
-                  background: "#fbbf24", color: "#0a0a0f", border: "none",
-                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
-                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
-                  cursor: "pointer", borderRadius: 6,
-                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  position: "absolute", inset: 0,
+                  background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                  padding: "40px 32px",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
-                UNLOCK FULL REPORT →
-              </button>
-
-              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                  How does your brand stack up against competitors in AI?
+                </div>
+                <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                  Unlock your full Competitive Context report. See where each LLM thinks you win and lose, sentiment breakdowns per model, and the gaps your competitors are exploiting.
+                </div>
+                <span style={{
+                  fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                  background: "#fbbf2415", border: "1px solid #fbbf2430",
+                  padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+                }}>
+                  ONE-TIME · $17
+                </span>
+                <button
+                  onClick={handleUnlock}
+                  disabled={checkingOut}
+                  style={{
+                    background: checkingOut ? "#6b7a99" : "#fbbf24", color: "#0a0a0f", border: "none",
+                    padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                    fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                    cursor: checkingOut ? "not-allowed" : "pointer", borderRadius: 6,
+                    transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                >
+                  {checkingOut ? "REDIRECTING…" : "UNLOCK FULL REPORT →"}
+                </button>
+                <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                  Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Card 5: Source Attribution (Locked) */}
+      {/* Card 5: Source Attribution */}
       <div className="fade" style={{ marginBottom: 40 }}>
         <SectionLabel>05 — SOURCE ATTRIBUTION</SectionLabel>
         <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
-          {/* Card header (visible above blur) */}
           <div style={{ padding: "24px 28px 0" }}>
             <div
               style={{
@@ -971,122 +1108,137 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>Source Attribution</span>
-                  <span style={{
-                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
-                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
-                  }}>
-                    🔒 LOCKED
-                  </span>
+                  {!unlocked && (
+                    <span style={{
+                      fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                      background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                    }}>
+                      🔒 LOCKED
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: "#6b7a99" }}>Which sites are feeding LLMs information about your brand?</div>
               </div>
             </div>
           </div>
 
-          {/* Blurred + overlay container */}
-          <div style={{ position: "relative", overflow: "hidden", minHeight: 380 }}>
-            {/* Blurred fake content */}
-            <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
-              {/* Fake citation table */}
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
-                  TOP CITATION SOURCES
-                </div>
-                <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["SOURCE", "YOUR CITATIONS", "COMPETITOR AVG", "GAP"].map((h) => (
-                        <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { domain: "G2", yours: 12, comp: 847, status: "danger" },
-                      { domain: "Reddit", yours: 4, comp: 203, status: "danger" },
-                      { domain: "Capterra", yours: 28, comp: 312, status: "warn" },
-                    ].map((s, i) => {
-                      const gc: Record<string, string> = { danger: "#f87171", warn: "#fbbf24", ok: "#3b82f6" };
-                      const c = gc[s.status] || "#6b7a99";
-                      const gap = s.comp - s.yours;
-                      return (
+          {unlocked && d.sourceAttribution ? (
+            <div style={{ padding: "0 28px 28px" }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 12 }}>
+                TOP CITATION SOURCES
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                {d.sourceAttribution.sources.map((s, i) => {
+                  const statusColors: Record<string, string> = { strong: "#3b82f6", weak: "#fbbf24", missing: "#f87171" };
+                  const priorityColors: Record<string, string> = { high: "#f87171", medium: "#fbbf24", low: "#6b7a99" };
+                  const c = statusColors[s.status] || "#6b7a99";
+                  return (
+                    <div key={i} style={{ display: "flex", gap: 14, padding: "12px 16px", background: "#0a0a14", border: `1px solid ${c}20`, borderRadius: 8, alignItems: "flex-start" }}>
+                      <div style={{ minWidth: 90, flexShrink: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#dce4f5" }}>{s.domain}</div>
+                        <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 3, background: `${c}18`, color: c, fontWeight: 500 }}>{s.status}</span>
+                      </div>
+                      <div style={{ flex: 1, fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{s.note}</div>
+                      <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${priorityColors[s.priority] || "#6b7a99"}18`, color: priorityColors[s.priority] || "#6b7a99", fontWeight: 500, flexShrink: 0 }}>
+                        {s.priority} priority
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <InsightBox>{d.sourceAttribution.insight}</InsightBox>
+            </div>
+          ) : unlocked ? (
+            <div style={{ padding: "28px", textAlign: "center" }}>
+              <div style={{ fontSize: 24, marginBottom: 12, opacity: 0.5 }}>⟳</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#6b7a99" }}>GENERATING YOUR REPORT…</div>
+              <div style={{ fontSize: 13, color: "#3a4060", marginTop: 8 }}>This usually takes 15–30 seconds. The page will update automatically.</div>
+            </div>
+          ) : (
+            <div style={{ position: "relative", overflow: "hidden", minHeight: 380 }}>
+              <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>TOP CITATION SOURCES</div>
+                  <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                    <thead>
+                      <tr>
+                        {["SOURCE", "STATUS", "PRIORITY", "NOTE"].map((h) => (
+                          <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#6b7a99", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { domain: "G2", status: "missing", priority: "high" },
+                        { domain: "Reddit", status: "weak", priority: "high" },
+                        { domain: "Capterra", status: "weak", priority: "medium" },
+                      ].map((s, i) => (
                         <tr key={i}>
                           <td style={{ fontSize: 13, color: "#dce4f5", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.domain}</td>
-                          <td style={{ color: c, fontWeight: 600, fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.yours}</td>
-                          <td style={{ color: "#6b7a99", fontFamily: "'Space Mono', monospace", fontSize: 12, padding: "10px 0", borderTop: "1px solid #1e1e30" }}>{s.comp}</td>
                           <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30" }}>
-                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>
-                              {gap > 0 ? `-${gap} behind` : "on par"}
-                            </span>
+                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#f8717118", color: "#f87171" }}>{s.status}</span>
                           </td>
+                          <td style={{ padding: "10px 0", borderTop: "1px solid #1e1e30", color: "#6b7a99", fontSize: 12 }}>{s.priority}</td>
+                          <td style={{ fontSize: 13, color: "#6b7a99", padding: "10px 0 10px 12px", borderTop: "1px solid #1e1e30" }}>— — — — —</td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-
-            </div>
-
-            {/* Gradient overlay with CTA */}
-            <div
-              style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
-                padding: "40px 32px",
-              }}
-            >
-              {/* Lock icon */}
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-
-              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
-                Where do LLMs get their information about you?
-              </div>
-
-              <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
-                Unlock your full Source Attribution report. See exactly which sites are feeding LLMs information about your brand, where you&apos;re missing vs competitors, and a prioritized action plan to fix it.
-              </div>
-
-              <span style={{
-                fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
-                background: "#fbbf2415", border: "1px solid #fbbf2430",
-                padding: "4px 14px", borderRadius: 4, marginBottom: 16,
-              }}>
-                ONE-TIME · $17
-              </span>
-
-              <button
-                onClick={() => {}}
+              <div
                 style={{
-                  background: "#fbbf24", color: "#0a0a0f", border: "none",
-                  padding: "14px 36px", fontFamily: "'Space Mono', monospace",
-                  fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
-                  cursor: "pointer", borderRadius: 6,
-                  transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  position: "absolute", inset: 0,
+                  background: "linear-gradient(to bottom, #0a0a0f00 0%, #0a0a0fcc 30%, #0a0a0fff 60%)",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
+                  padding: "40px 32px",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
-                UNLOCK FULL REPORT →
-              </button>
-
-              <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
-                Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" stroke="#6b7a99" strokeWidth="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" stroke="#6b7a99" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f0f4ff", marginBottom: 8, textAlign: "center" }}>
+                  Where do LLMs get their information about you?
+                </div>
+                <div style={{ fontSize: 14, color: "#8892aa", maxWidth: 440, textAlign: "center", lineHeight: 1.6, marginBottom: 24 }}>
+                  Unlock your full Source Attribution report. See exactly which sites are feeding LLMs information about your brand and where you&apos;re missing vs competitors.
+                </div>
+                <span style={{
+                  fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#fbbf24",
+                  background: "#fbbf2415", border: "1px solid #fbbf2430",
+                  padding: "4px 14px", borderRadius: 4, marginBottom: 16,
+                }}>
+                  ONE-TIME · $17
+                </span>
+                <button
+                  onClick={handleUnlock}
+                  disabled={checkingOut}
+                  style={{
+                    background: checkingOut ? "#6b7a99" : "#fbbf24", color: "#0a0a0f", border: "none",
+                    padding: "14px 36px", fontFamily: "'Space Mono', monospace",
+                    fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
+                    cursor: checkingOut ? "not-allowed" : "pointer", borderRadius: 6,
+                    transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+                  }}
+                  onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                >
+                  {checkingOut ? "REDIRECTING…" : "UNLOCK FULL REPORT →"}
+                </button>
+                <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
+                  Includes recommendation rank · competitive context · source attribution · 30-day fix roadmap
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Card 6: 30-Day Fix Roadmap (Locked) */}
+      {/* Card 6: 30-Day Fix Roadmap */}
       <div className="fade" style={{ marginBottom: 40 }}>
         <SectionLabel>06 — 30-DAY FIX ROADMAP</SectionLabel>
         <div style={{ background: "#0f0f1a", border: "1px solid #1e1e30", borderRadius: 10, overflow: "hidden" }}>
-          {/* Card header (visible above blur) */}
           <div style={{ padding: "24px 28px 0" }}>
             <div
               style={{
@@ -1098,21 +1250,57 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               <div style={{ flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                   <span style={{ fontSize: 15, fontWeight: 600, color: "#dce4f5" }}>30-Day Fix Roadmap</span>
-                  <span style={{
-                    fontSize: 11, padding: "4px 12px", borderRadius: 4,
-                    background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
-                  }}>
-                    🔒 LOCKED
-                  </span>
+                  {!unlocked && (
+                    <span style={{
+                      fontSize: 11, padding: "4px 12px", borderRadius: 4,
+                      background: "#fbbf2415", border: "1px solid #fbbf2430", color: "#fbbf24", fontWeight: 500,
+                    }}>
+                      🔒 LOCKED
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 13, color: "#6b7a99" }}>A prioritized, week-by-week action plan to improve your LLM visibility score.</div>
               </div>
             </div>
           </div>
 
-          {/* Blurred + overlay container */}
+          {unlocked && d.roadmap ? (
+            <div style={{ padding: "0 28px 28px" }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 12 }}>
+                WEEK-BY-WEEK ACTIONS
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
+                {d.roadmap.weeks.map((week, wi) => (
+                  <div key={wi}>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#fbbf24", marginBottom: 8 }}>
+                      {week.week}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {week.actions.map((item, ai) => {
+                        const impactColor = item.impact === "High" ? "#f87171" : item.impact === "Medium" ? "#fbbf24" : "#6b7a99";
+                        return (
+                          <div key={ai} style={{ display: "flex", gap: 14, padding: "12px 14px", background: "#0a0a14", border: "1px solid #1e1e30", borderRadius: 6, alignItems: "flex-start" }}>
+                            <div style={{ flex: 1, fontSize: 13, color: "#8892aa", lineHeight: 1.5 }}>{item.action}</div>
+                            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${impactColor}18`, color: impactColor, fontWeight: 500, flexShrink: 0 }}>
+                              {item.impact}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <InsightBox>{d.roadmap.insight}</InsightBox>
+            </div>
+          ) : unlocked ? (
+            <div style={{ padding: "28px", textAlign: "center" }}>
+              <div style={{ fontSize: 24, marginBottom: 12, opacity: 0.5 }}>⟳</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#6b7a99" }}>GENERATING YOUR ROADMAP…</div>
+              <div style={{ fontSize: 13, color: "#3a4060", marginTop: 8 }}>This usually takes 15–30 seconds. The page will update automatically.</div>
+            </div>
+          ) : (
           <div style={{ position: "relative", overflow: "hidden", minHeight: 380 }}>
-            {/* Blurred fake content */}
             <div style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none", padding: "0 28px 28px" }}>
               <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#6b7a99", marginBottom: 10 }}>
                 WEEK-BY-WEEK ACTIONS
@@ -1165,18 +1353,19 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </span>
 
               <button
-                onClick={() => {}}
+                onClick={handleUnlock}
+                disabled={checkingOut}
                 style={{
-                  background: "#fbbf24", color: "#0a0a0f", border: "none",
+                  background: checkingOut ? "#6b7a99" : "#fbbf24", color: "#0a0a0f", border: "none",
                   padding: "14px 36px", fontFamily: "'Space Mono', monospace",
                   fontSize: 14, fontWeight: 700, letterSpacing: "1.5px",
-                  cursor: "pointer", borderRadius: 6,
+                  cursor: checkingOut ? "not-allowed" : "pointer", borderRadius: 6,
                   transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; }}
+                onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 24px #fbbf2440"; } }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
               >
-                UNLOCK FULL REPORT →
+                {checkingOut ? "REDIRECTING…" : "UNLOCK FULL REPORT →"}
               </button>
 
               <div style={{ fontSize: 11, color: "#3a4060", marginTop: 10 }}>
@@ -1184,6 +1373,7 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
 
@@ -1284,9 +1474,13 @@ function AuditResultsView({ d, websiteUrl }: { d: AuditResult; websiteUrl: strin
 
 export default function AuditPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const auditId = params.id as string;
   const [audit, setAudit] = useState<AuditRow | null>(null);
   const [error, setError] = useState(false);
+  const [paymentBanner, setPaymentBanner] = useState<"success" | "cancelled" | null>(
+    () => (searchParams.get("payment") as "success" | "cancelled" | null)
+  );
 
   const fetchAudit = useCallback(async () => {
     try {
@@ -1308,7 +1502,10 @@ export default function AuditPage() {
   }, [fetchAudit]);
 
   useEffect(() => {
-    if (!audit || audit.status !== "pending") return;
+    if (!audit) return;
+    const isPending = audit.status === "pending";
+    const isGenerating = audit.unlocked && audit.result && (!audit.result.sourceAttribution || !audit.result.roadmap);
+    if (!isPending && !isGenerating) return;
     const interval = setInterval(fetchAudit, 2000);
     return () => clearInterval(interval);
   }, [audit, fetchAudit]);
@@ -1331,6 +1528,42 @@ export default function AuditPage() {
         ::-webkit-scrollbar-track { background: #0a0a0f; }
         ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
       `}</style>
+
+      {/* Payment result banner */}
+      {paymentBanner === "success" && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+          background: "#052e16", borderBottom: "1px solid #16a34a40",
+          padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <span style={{ fontSize: 13, color: "#4ade80" }}>
+            ✓ &nbsp;Payment confirmed — your full report is being unlocked now.
+          </span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            style={{ background: "none", border: "none", color: "#4ade80", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {paymentBanner === "cancelled" && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+          background: "#1c0a00", borderBottom: "1px solid #f8717140",
+          padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <span style={{ fontSize: 13, color: "#f87171" }}>
+            Payment was cancelled — your free report is still available below.
+          </span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: 18, lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Scanline */}
       <div
@@ -1357,7 +1590,7 @@ export default function AuditPage() {
       ) : audit.status === "pending" ? (
         <LoadingState brand={audit.brand} category={audit.category} />
       ) : audit.status === "complete" && audit.result ? (
-        <AuditResultsView d={audit.result} websiteUrl={audit.website_url} />
+        <AuditResultsView d={audit.result} websiteUrl={audit.website_url} unlocked={audit.unlocked ?? false} auditId={audit.id} />
       ) : (
         <ErrorState onRetry={() => (window.location.href = "/")} />
       )}

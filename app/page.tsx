@@ -303,7 +303,7 @@ export default function Home() {
               e.currentTarget.style.boxShadow = "none";
             }}
           >
-            {loading ? "LAUNCHING AUDIT..." : "RUN AUDIT FOR FREE →"}
+            {loading ? "LAUNCHING AUDIT..." : "GET MY SCORE FOR FREE →"}
           </button>
         </div>
 

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await getSupabase()
     .from("audits")
-    .select("id, status, brand, category, website_url, result, overall_score, overall_verdict")
+    .select("id, status, brand, category, website_url, result, overall_score, overall_verdict, unlocked, unlocked_at")
     .eq("id", id)
     .single();
 
