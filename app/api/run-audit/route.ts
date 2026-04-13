@@ -26,7 +26,8 @@ function getGenAI() {
 const SYSTEM_PROMPT =
   "You are a knowledgeable software advisor. Answer directly and honestly based on what you actually know. Do not hedge excessively. If you don't know something, say so clearly.";
 
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 20_000;
+const CLAUDE_TIMEOUT_MS = 35_000;
 
 // ── Model callers ────────────────────────────────────────────
 
@@ -82,12 +83,12 @@ async function callPerplexity(prompt: string): Promise<string> {
 async function callClaude(prompt: string): Promise<string> {
   const res = await withTimeout(
     getAnthropic().messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],
     }),
-    TIMEOUT_MS
+    CLAUDE_TIMEOUT_MS
   );
   return res.content[0]?.type === "text" ? res.content[0].text : "";
 }
@@ -103,13 +104,14 @@ async function callGemini(prompt: string): Promise<string> {
   return res.response.text();
 }
 
-// ── Extraction via Claude ────────────────────────────────────
+// ── Extraction (Claude primary, OpenAI fallback) ─────────────
 
 async function extractJSON(extractionPrompt: string): Promise<any> {
+  // Try Claude first
   try {
     const res = await withTimeout(
       getAnthropic().messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 500,
         messages: [{ role: "user", content: extractionPrompt }],
       }),
@@ -119,7 +121,22 @@ async function extractJSON(extractionPrompt: string): Promise<any> {
     const cleaned = text.replace(/```json\s*/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleaned);
   } catch {
-    return null;
+    // Fallback to OpenAI if Claude fails
+    try {
+      const res = await withTimeout(
+        getOpenAI().chat.completions.create({
+          model: "gpt-4o",
+          messages: [{ role: "user", content: extractionPrompt }],
+          max_tokens: 500,
+          response_format: { type: "json_object" },
+        }),
+        TIMEOUT_MS
+      );
+      const text = res.choices[0]?.message?.content ?? "{}";
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -288,11 +305,14 @@ export async function POST(req: NextRequest) {
 }
 
 async function processAudit(auditId: string, brand: string, category: string) {
+  // Normalize category for prompts — avoid "Productivity tool tools"
+  const categoryBase = category.replace(/\s+tools?\s*$/i, "").trim();
+
   const prompts = {
     awareness: `Do you know a SaaS product called "${brand}"? Describe what it does in 2-3 sentences. If you don't recognize it, say so directly.`,
-    positioning: `How is "${brand}" positioned in the ${category} market? Who is their target customer? What is their main value proposition as understood by the market? How do they differentiate from competitors? Be specific and direct.`,
-    recommendation: `What are the best ${category} tools available right now? Give me your top 5 recommendations, ranked from best to worst. Be specific about who each tool is best for.`,
-    competitive: `How does ${brand} compare to its top competitors in the ${category} space? List 3 specific things ${brand} does better than competitors, and 3 specific things where competitors beat ${brand}. Be direct and honest.`,
+    positioning: `How is "${brand}" positioned in the ${categoryBase} market? Who is their target customer? What is their main value proposition as understood by the market? How do they differentiate from competitors? Be specific and direct.`,
+    recommendation: `What are the best ${categoryBase} tools available right now? Give me your top 5 recommendations, ranked from best to worst. Be specific about who each tool is best for.`,
+    competitive: `How does ${brand} compare to its top competitors in the ${categoryBase} space? List 3 specific things ${brand} does better than competitors, and 3 specific things where competitors beat ${brand}. Be direct and honest.`,
   };
 
   const modelAwareness: any[] = [];
@@ -438,14 +458,14 @@ async function processAudit(auditId: string, brand: string, category: string) {
   try {
     const res = await withTimeout(
       getAnthropic().messages.create({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 200,
         messages: [{
           role: "user",
           content: `Based on how 4 LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
         }],
       }),
-      TIMEOUT_MS
+      CLAUDE_TIMEOUT_MS
     );
     positioningInsight = res.content[0]?.type === "text" ? res.content[0].text : "";
   } catch {
@@ -536,12 +556,12 @@ async function processAudit(auditId: string, brand: string, category: string) {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-async function runAllModels(prompt: string): Promise<Array<{ text: string; error?: boolean }>> {
+async function runAllModels(prompt: string): Promise<Array<{ text: string; error?: boolean; errorMsg?: string }>> {
   const results = await Promise.all([
-    callOpenAI(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
-    callPerplexity(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
-    callClaude(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
-    callGemini(prompt).then((text) => ({ text })).catch(() => ({ text: "", error: true as const })),
+    callOpenAI(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
+    callPerplexity(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
+    callClaude(prompt).then((text) => ({ text })).catch((e) => { console.error("Claude error:", e?.message); return { text: "", error: true as const, errorMsg: e?.message }; }),
+    callGemini(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
   ]);
   return results;
 }
