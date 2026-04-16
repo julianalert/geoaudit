@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const { data: audit } = await getSupabase()
       .from("audits")
-      .select("id, brand, category, result")
+      .select("id, brand, category, website_url, result")
       .eq("id", auditId)
       .single();
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     after(async () => {
       try {
-        await generatePremiumContent(auditId, audit.brand, audit.category, audit.result);
+        await generatePremiumContent(auditId, audit.brand, audit.category, audit.website_url || "", audit.result);
       } catch (err) {
         console.error("[stripe-webhook] Premium content generation failed:", err);
       }

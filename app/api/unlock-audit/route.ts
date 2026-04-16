@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const { data: audit, error: fetchErr } = await getSupabase()
     .from("audits")
-    .select("id, brand, category, result, unlocked")
+    .select("id, brand, category, website_url, result, unlocked")
     .eq("id", id)
     .single();
 
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   after(async () => {
     try {
-      await generatePremiumContent(id, audit.brand, audit.category, audit.result);
+      await generatePremiumContent(id, audit.brand, audit.category, audit.website_url || "", audit.result);
     } catch (err) {
       console.error("Premium content generation failed:", err);
     }

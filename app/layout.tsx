@@ -21,7 +21,7 @@ export default function RootLayout({
         style={{
           margin: 0,
           padding: 0,
-          background: "#0a0a0f",
+          background: "#f8fafc",
           fontFamily: "'Inter', system-ui, sans-serif",
         }}
       >

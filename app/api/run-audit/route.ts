@@ -23,13 +23,7 @@ function getGenAI() {
   return _genAI;
 }
 
-const SYSTEM_PROMPT =
-  "You are a knowledgeable software advisor. Answer directly and honestly based on what you actually know. Do not hedge excessively. If you don't know something, say so clearly.";
-
-const TIMEOUT_MS = 20_000;
-const CLAUDE_TIMEOUT_MS = 35_000;
-
-// ── Model callers ────────────────────────────────────────────
+const TIMEOUT_MS = 25_000;
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -40,7 +34,103 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   ]);
 }
 
-async function callOpenAI(prompt: string): Promise<string> {
+function clamp(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function safeParseJSON(text: string): any {
+  try { return JSON.parse(text); } catch {}
+  let cleaned = text
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+    .replace(/```json\s*/g, "")
+    .replace(/```\s*/g, "")
+    .trim();
+  try { return JSON.parse(cleaned); } catch {}
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
+  }
+  return null;
+}
+
+// ── Website Scraping ─────────────────────────────────────────
+
+async function scrapeWebsite(url: string): Promise<{ title: string; description: string; content: string } | null> {
+  try {
+    let normalizedUrl = url;
+    if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
+      normalizedUrl = "https://" + normalizedUrl;
+    }
+    const res = await withTimeout(
+      fetch(normalizedUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; GEOAudit/1.0)" },
+        redirect: "follow",
+      }),
+      10_000
+    );
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+
+    const descMatch =
+      html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["']/i) ||
+      html.match(/<meta[^>]*content=["']([\s\S]*?)["'][^>]*name=["']description["']/i);
+    const ogDescMatch =
+      html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["']/i) ||
+      html.match(/<meta[^>]*content=["']([\s\S]*?)["'][^>]*property=["']og:description["']/i);
+    const description = descMatch?.[1]?.trim() ?? ogDescMatch?.[1]?.trim() ?? "";
+
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyHtml = bodyMatch?.[1] ?? html;
+    const content = bodyHtml
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 2000);
+
+    return { title, description, content };
+  } catch {
+    return null;
+  }
+}
+
+async function detectCategory(
+  scraped: { title: string; description: string; content: string },
+  brand: string
+): Promise<string> {
+  try {
+    const model = getGenAI().getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: { responseMimeType: "application/json" } as any,
+    });
+    const res = await withTimeout(
+      model.generateContent({
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `Based on this website, determine the product category for "${brand}". Return JSON: {"category": "category in 2-4 words, e.g. project management, CRM, design tool, analytics"}\n\nTitle: ${scraped.title}\nDescription: ${scraped.description}\nContent: ${scraped.content.slice(0, 800)}`,
+          }],
+        }],
+      }),
+      15_000
+    );
+    const json = safeParseJSON(res.response.text());
+    return json?.category || "SaaS";
+  } catch {
+    return "SaaS";
+  }
+}
+
+// ── Model Callers (JSON mode) ────────────────────────────────
+
+const SYSTEM_PROMPT =
+  "You are a knowledgeable technology advisor. Answer directly and honestly based on what you actually know. If you don't know something, say so. Always respond with valid JSON only, no markdown fences, no extra text.";
+
+async function callOpenAIJSON(prompt: string): Promise<any> {
   const res = await withTimeout(
     getOpenAI().chat.completions.create({
       model: "gpt-4o",
@@ -48,14 +138,15 @@ async function callOpenAI(prompt: string): Promise<string> {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
       ],
-      max_tokens: 1000,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
     }),
     TIMEOUT_MS
   );
-  return res.choices[0]?.message?.content ?? "";
+  return JSON.parse(res.choices[0]?.message?.content ?? "{}");
 }
 
-async function callPerplexity(prompt: string): Promise<string> {
+async function callPerplexityJSON(prompt: string): Promise<any> {
   const res = await withTimeout(
     fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
@@ -69,7 +160,7 @@ async function callPerplexity(prompt: string): Promise<string> {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
-        max_tokens: 1000,
+        max_tokens: 500,
       }),
     }).then(async (r) => {
       if (!r.ok) throw new Error(`Perplexity ${r.status}`);
@@ -77,142 +168,215 @@ async function callPerplexity(prompt: string): Promise<string> {
     }),
     TIMEOUT_MS
   );
-  return res.choices?.[0]?.message?.content ?? "";
+  const text = res.choices?.[0]?.message?.content ?? "{}";
+  const parsed = safeParseJSON(text);
+  if (!parsed) throw new Error("Perplexity JSON parse failed");
+  return parsed;
 }
 
-async function callClaude(prompt: string): Promise<string> {
+async function callClaudeJSON(prompt: string): Promise<any> {
   const res = await withTimeout(
     getAnthropic().messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT + "\nRespond ONLY with the JSON object. No preamble, no explanation, no markdown fences.",
+      messages: [
+        { role: "user", content: prompt },
+        { role: "assistant", content: "{" },
+      ],
     }),
-    CLAUDE_TIMEOUT_MS
+    30_000
   );
-  return res.content[0]?.type === "text" ? res.content[0].text : "";
+  const text = res.content[0]?.type === "text" ? "{" + res.content[0].text : "{}";
+  const parsed = safeParseJSON(text);
+  if (!parsed) throw new Error("Claude JSON parse failed");
+  return parsed;
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  const model = getGenAI().getGenerativeModel({ model: "gemini-2.5-flash" });
+async function callGeminiJSON(prompt: string): Promise<any> {
+  const model = getGenAI().getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: { responseMimeType: "application/json" } as any,
+  });
   const res = await withTimeout(
     model.generateContent({
       contents: [{ role: "user", parts: [{ text: `${SYSTEM_PROMPT}\n\n${prompt}` }] }],
     }),
     TIMEOUT_MS
   );
-  return res.response.text();
+  return JSON.parse(res.response.text());
 }
 
-// ── Extraction (Claude primary, OpenAI fallback) ─────────────
+type ModelCaller = (prompt: string) => Promise<any>;
+const MODEL_NAMES = ["GPT-4o", "Perplexity", "Claude", "Gemini"] as const;
+const MODEL_CALLERS: ModelCaller[] = [callOpenAIJSON, callPerplexityJSON, callClaudeJSON, callGeminiJSON];
 
-async function extractJSON(extractionPrompt: string): Promise<any> {
-  // Try Claude first
-  try {
-    const res = await withTimeout(
-      getAnthropic().messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 500,
-        messages: [{ role: "user", content: extractionPrompt }],
-      }),
-      TIMEOUT_MS
-    );
-    const text = res.content[0]?.type === "text" ? res.content[0].text : "{}";
-    const cleaned = text.replace(/```json\s*/g, "").replace(/```/g, "").trim();
-    return JSON.parse(cleaned);
-  } catch {
-    // Fallback to OpenAI if Claude fails
-    try {
-      const res = await withTimeout(
-        getOpenAI().chat.completions.create({
-          model: "gpt-4o",
-          messages: [{ role: "user", content: extractionPrompt }],
-          max_tokens: 500,
-          response_format: { type: "json_object" },
-        }),
-        TIMEOUT_MS
-      );
-      const text = res.choices[0]?.message?.content ?? "{}";
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  }
+async function runAllModels(prompt: string): Promise<Array<{ data: any; error?: boolean }>> {
+  return Promise.all(
+    MODEL_CALLERS.map((caller) =>
+      caller(prompt)
+        .then((data) => ({ data }))
+        .catch((e) => {
+          console.error("Model call failed:", e?.message);
+          return { data: null, error: true as const };
+        })
+    )
+  );
+}
+
+// ── Prompt Builders ──────────────────────────────────────────
+
+function buildAwarenessPrompt(brand: string): string {
+  return `Do you know a product called "${brand}"? Rate honestly — if you've never heard of it, all scores should be near 0.
+
+Respond with JSON:
+{
+  "brand_recognized": true/false,
+  "description": "2-3 sentence description, or null if unrecognized",
+  "recognition_score": 0-100,
+  "accuracy_score": 0-100,
+  "detail_score": 0-100,
+  "confidence_score": 0-100
+}
+
+Scoring guide: 0-20 = no knowledge, 21-40 = vaguely familiar, 41-60 = know it reasonably well, 61-80 = know it well with details, 81-100 = deep expertise on this product.`;
+}
+
+function buildPositioningPrompt(brand: string, categoryBase: string): string {
+  return `How is "${brand}" positioned in the ${categoryBase} market? Who is their target customer? What is their main value proposition? How do they differentiate?
+
+IMPORTANT: Only answer based on what you genuinely know about this brand. If you don't recognize "${brand}" or have very little knowledge about it, set all scores to 0-10 and positioning_strength to "confused". Do NOT fabricate or guess positioning details for brands you don't know.
+
+Respond with JSON:
+{
+  "brand_known": true/false,
+  "target_customer": "one sentence, or empty string if unknown",
+  "value_proposition": "one sentence, or empty string if unknown",
+  "differentiation": "one sentence, or empty string if unknown",
+  "target_clarity": 0-100,
+  "value_prop_accuracy": 0-100,
+  "differentiation_clarity": 0-100,
+  "positioning_strength": "strong" | "weak" | "confused",
+  "note": "one sentence flagging anything inaccurate or missing"
+}
+
+Scoring: 0-10 = don't know this brand, 11-30 = vague guesses, 31-60 = partially clear, 61-80 = clear and accurate, 81-100 = precisely understood.`;
+}
+
+function buildRecommendationPrompt(brand: string, categoryBase: string): string {
+  return `What are the best ${categoryBase} tools available right now? Give me your top 5 ranked from best to worst. Be specific about who each tool is best for.
+
+After listing your top 5, check: does "${brand}" appear in your list?
+
+Respond with JSON:
+{
+  "tools_mentioned": ["tool1", "tool2", "tool3", "tool4", "tool5"],
+  "brand_mentioned": true/false,
+  "brand_position": null or 1-5,
+  "tools_above_brand": ["tools ranked above ${brand}"],
+  "recommendation_strength": 0-100,
+  "context_relevance": 0-100
+}
+
+recommendation_strength: 0 = would never recommend, 50 = decent option, 100 = undisputed leader.
+context_relevance: 0 = wrong category, 50 = tangentially relevant, 100 = perfect fit.`;
+}
+
+function buildCompetitivePrompt(brand: string, categoryBase: string): string {
+  return `Compare "${brand}" to its top competitors in the ${categoryBase} space. What does ${brand} do better? Where do competitors beat ${brand}?
+
+Respond with JSON:
+{
+  "wins": ["specific advantage 1", "specific advantage 2", "specific advantage 3"],
+  "losses": ["specific weakness 1", "specific weakness 2", "specific weakness 3"],
+  "sentiment": "positive" | "neutral" | "negative",
+  "sentiment_note": "one sentence explaining overall tone",
+  "sentiment_score": 0-100,
+  "win_specificity": 0-100,
+  "competitive_awareness": 0-100
+}
+
+sentiment_score: 0 = very negative view, 50 = neutral, 100 = very favorable.
+win_specificity: 0 = can't name anything specific, 50 = generic wins, 100 = highly specific and accurate advantages.
+competitive_awareness: 0 = don't know this competitive landscape, 50 = basic understanding, 100 = deep knowledge.`;
 }
 
 // ── Scoring ──────────────────────────────────────────────────
 
-function scoreAwareness(extracted: any): number {
-  if (!extracted || !extracted.brand_recognized) return 0;
-  if (extracted.recognition_strength === "unknown") return 25;
-  if (extracted.recognition_strength === "weak") return 50;
-  if (extracted.recognition_strength === "strong") {
-    if (extracted.accuracy_score <= 2) return 60;
-    if (extracted.accuracy_score === 3) return 75;
-    if (extracted.accuracy_score >= 4) return 90;
+function scoreAwareness(data: any): { score: number; subscores: { recognition: number; accuracy: number; detail: number; confidence: number } } {
+  if (!data || !data.brand_recognized) {
+    const r = clamp(data?.recognition_score ?? 0);
+    return { score: Math.round(r * 0.3), subscores: { recognition: r, accuracy: 0, detail: 0, confidence: 0 } };
   }
-  return 25;
+  const recognition = clamp(data.recognition_score ?? 50);
+  const accuracy = clamp(data.accuracy_score ?? 50);
+  const detail = clamp(data.detail_score ?? 30);
+  const confidence = clamp(data.confidence_score ?? 50);
+  const score = Math.round((recognition + accuracy + detail + confidence) / 4);
+  return { score, subscores: { recognition, accuracy, detail, confidence } };
 }
 
-function scoreRecommendation(extracted: any): number {
-  if (!extracted || !extracted.brand_mentioned) return 0;
-  const pos = extracted.brand_position;
-  if (pos === null || pos === undefined) return 0;
-  if (pos === 5) return 30;
-  if (pos === 4) return 45;
-  if (pos === 3) return 60;
-  if (pos === 2) return 78;
-  if (pos === 1) return 95;
-  return 0;
-}
-
-function scoreCompetitive(extracted: any): number {
-  if (!extracted) return 20;
-  const s = extracted.sentiment;
-  const wins = extracted.wins?.length ?? 0;
-  if (s === "negative") return 20;
-  if (s === "neutral") return wins < 2 ? 40 : 58;
-  if (s === "positive") return wins < 2 ? 55 : 80;
-  return 40;
-}
-
-function scorePositioning(extracted: any): number {
-  if (!extracted) return 15;
-  const s = extracted.positioning_strength;
-  const acc = extracted.positioning_accuracy ?? 1;
-  if (s === "confused") return 15;
-  if (s === "weak") return acc <= 2 ? 30 : 50;
-  if (s === "strong") {
-    if (acc <= 3) return 65;
-    if (acc === 4) return 80;
-    if (acc >= 5) return 92;
+function scorePositioning(data: any, awarenessKnown: boolean): number {
+  if (!data) return 0;
+  if (data.brand_known === false || !awarenessKnown) {
+    const tc = clamp(data.target_clarity ?? 0);
+    const vp = clamp(data.value_prop_accuracy ?? 0);
+    const dc = clamp(data.differentiation_clarity ?? 0);
+    return Math.min(10, Math.round((tc + vp + dc) / 3));
   }
-  return 30;
+  const tc = clamp(data.target_clarity ?? 0);
+  const vp = clamp(data.value_prop_accuracy ?? 0);
+  const dc = clamp(data.differentiation_clarity ?? 0);
+  return Math.round((tc + vp + dc) / 3);
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 70) return "#00ff87";
-  if (score >= 45) return "#fbbf24";
-  return "#f87171";
+function scoreRecommendation(data: any): number {
+  if (!data) return 0;
+  if (!data.brand_mentioned) {
+    return 0;
+  }
+  const pos = data.brand_position;
+  if (!pos || pos < 1 || pos > 5) return 5;
+  const posScore = clamp(((6 - pos) / 5) * 100);
+  const rs = clamp(data.recommendation_strength ?? 50);
+  const cr = clamp(data.context_relevance ?? 50);
+  return Math.round(posScore * 0.6 + rs * 0.25 + cr * 0.15);
+}
+
+function scoreCompetitive(data: any): number {
+  if (!data) return 0;
+  const ss = clamp(data.sentiment_score ?? 40);
+  const ws = clamp(data.win_specificity ?? 20);
+  const ca = clamp(data.competitive_awareness ?? 20);
+  return Math.round((ss + ws + ca) / 3);
+}
+
+function computeConsistency(scores: number[]): number {
+  const valid = scores.filter((s) => s > 0);
+  if (valid.length < 2) return 0;
+  const mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+  const variance = valid.reduce((sum, s) => sum + (s - mean) ** 2, 0) / valid.length;
+  const stddev = Math.sqrt(variance);
+  return Math.max(0, Math.round(5 - stddev / 5));
 }
 
 function getScoreLabel(score: number, type: string): string {
   if (type === "awareness") {
-    if (score >= 80) return "Well Known";
-    if (score >= 50) return "Mostly Known";
-    if (score >= 25) return "Barely Known";
+    if (score >= 75) return "Well Known";
+    if (score >= 50) return "Recognized";
+    if (score >= 30) return "Barely Known";
     return "Unknown";
   }
   if (type === "positioning") {
-    if (score >= 80) return "Well Defined";
-    if (score >= 60) return "Inconsistent";
-    if (score >= 35) return "Confused";
+    if (score >= 75) return "Well Defined";
+    if (score >= 50) return "Partially Clear";
+    if (score >= 30) return "Confused";
     return "Unknown";
   }
   if (type === "recommendation") {
-    if (score >= 80) return "Top Pick";
-    if (score >= 60) return "Competitive";
-    if (score >= 30) return "Weak Rank";
+    if (score >= 75) return "Top Pick";
+    if (score >= 50) return "Competitive";
+    if (score >= 25) return "Weak Rank";
     return "Not Listed";
   }
   if (type === "competitive") {
@@ -224,60 +388,66 @@ function getScoreLabel(score: number, type: string): string {
   return "";
 }
 
-function getPositioningColor(score: number): string {
-  if (score >= 80) return "#00ff87";
-  if (score >= 60) return "#fbbf24";
-  if (score >= 35) return "#fb923c";
+function getScoreColor(score: number): string {
+  if (score >= 70) return "#34d399";
+  if (score >= 45) return "#fbbf24";
   return "#f87171";
 }
 
 function getOverallVerdict(score: number): string {
-  if (score >= 90) return "LLM DOMINANT";
-  if (score >= 75) return "WELL POSITIONED";
-  if (score >= 60) return "IN THE ROOM";
-  if (score >= 45) return "VISIBLE BUT LOSING";
-  if (score >= 25) return "FAINT SIGNAL";
+  if (score >= 85) return "LLM DOMINANT";
+  if (score >= 70) return "WELL POSITIONED";
+  if (score >= 55) return "IN THE ROOM";
+  if (score >= 40) return "VISIBLE BUT LOSING";
+  if (score >= 20) return "FAINT SIGNAL";
   return "GHOST";
 }
 
 function getVerdictSub(verdict: string, brand: string): string {
   const map: Record<string, string> = {
     GHOST: `LLMs have no idea ${brand} exists. You're completely invisible in AI search.`,
-    "FAINT SIGNAL": `LLMs barely know ${brand} exists. Competitors are dominating the AI answer layer.`,
-    "VISIBLE BUT LOSING": `LLMs know ${brand} exists but aren't consistently recommending you. Competitors are capturing buyer intent you should own.`,
-    "IN THE ROOM": `LLMs know ${brand} and sometimes recommend you, but there's room to improve positioning.`,
-    "WELL POSITIONED": `${brand} has strong LLM presence. A few gaps to close before you dominate the AI answer layer.`,
+    "FAINT SIGNAL": `LLMs barely know ${brand}. Competitors are dominating the AI answer layer.`,
+    "VISIBLE BUT LOSING": `LLMs know ${brand} but aren't recommending you consistently. Competitors are capturing the intent you should own.`,
+    "IN THE ROOM": `LLMs know ${brand} and sometimes recommend you, but positioning gaps remain.`,
+    "WELL POSITIONED": `${brand} has strong LLM presence. A few gaps to close before you dominate AI search.`,
     "LLM DOMINANT": `${brand} is owning the AI answer layer. LLMs consistently know, describe, and recommend you.`,
   };
   return map[verdict] || "";
 }
 
 function getQuadrant(awarenessScore: number, recommendationScore: number) {
-  const highAwareness = awarenessScore >= 50;
-  const highRec = recommendationScore >= 50;
+  const highAwareness = awarenessScore >= 45;
+  const highRec = recommendationScore >= 45;
   if (highAwareness && highRec) return { label: "Dominant", description: "Models know and recommend you consistently." };
-  if (highAwareness && !highRec) return { label: "Visible but Losing", description: "Models know you but don't default to recommending you. High awareness, low conversion in AI search." };
+  if (highAwareness && !highRec) return { label: "Visible but Losing", description: "Models know you but don't recommend you. High awareness, low conversion in AI search." };
   if (!highAwareness && highRec) return { label: "Lucky", description: "Getting recommended without strong brand awareness. Fragile position." };
   return { label: "Ghost", description: "Low awareness and low recommendation. Invisible in AI search." };
 }
 
-// ── Main handler ─────────────────────────────────────────────
-
-const MODEL_NAMES = ["GPT-4o", "Perplexity", "Claude", "Gemini"] as const;
+// ── Main Handler ─────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { brand, category, websiteUrl } = body;
+    const { brand, category: userCategory, websiteUrl } = body;
 
-    if (!brand || !category || !websiteUrl) {
-      return NextResponse.json({ error: "Missing brand, category, or website URL" }, { status: 400 });
+    if (!brand || !websiteUrl) {
+      return NextResponse.json({ error: "Missing brand or website URL" }, { status: 400 });
     }
 
-    // Step 1 — Create pending row
+    const scraped = await scrapeWebsite(websiteUrl);
+    const category = userCategory?.trim() || (scraped ? await detectCategory(scraped, brand) : "SaaS");
+
     const { data: row, error: insertErr } = await getSupabase()
       .from("audits")
-      .insert({ brand, category, website_url: websiteUrl, overall_score: 0, overall_verdict: "pending", status: "pending" })
+      .insert({
+        brand,
+        category,
+        website_url: websiteUrl,
+        overall_score: 0,
+        overall_verdict: "pending",
+        status: "pending",
+      })
       .select("id")
       .single();
 
@@ -290,32 +460,35 @@ export async function POST(req: NextRequest) {
 
     after(async () => {
       try {
-        await processAudit(auditId, brand, category);
+        await processAudit(auditId, brand, category, scraped);
       } catch (err) {
         console.error("Audit processing failed:", err);
         await getSupabase().from("audits").update({ status: "error" }).eq("id", auditId);
       }
     });
 
-    return NextResponse.json({ id: auditId });
+    return NextResponse.json({ id: auditId, category });
   } catch (err) {
     console.error("run-audit error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-async function processAudit(auditId: string, brand: string, category: string) {
-  // Normalize category for prompts — avoid "Productivity tool tools"
+async function processAudit(
+  auditId: string,
+  brand: string,
+  category: string,
+  scraped: { title: string; description: string; content: string } | null
+) {
   const categoryBase = category.replace(/\s+tools?\s*$/i, "").trim();
 
   const prompts = {
-    awareness: `Do you know a SaaS product called "${brand}"? Describe what it does in 2-3 sentences. If you don't recognize it, say so directly.`,
-    positioning: `How is "${brand}" positioned in the ${categoryBase} market? Who is their target customer? What is their main value proposition as understood by the market? How do they differentiate from competitors? Be specific and direct.`,
-    recommendation: `What are the best ${categoryBase} tools available right now? Give me your top 5 recommendations, ranked from best to worst. Be specific about who each tool is best for.`,
-    competitive: `How does ${brand} compare to its top competitors in the ${categoryBase} space? List 3 specific things ${brand} does better than competitors, and 3 specific things where competitors beat ${brand}. Be direct and honest.`,
+    awareness: buildAwarenessPrompt(brand),
+    positioning: buildPositioningPrompt(brand, categoryBase),
+    recommendation: buildRecommendationPrompt(brand, categoryBase),
+    competitive: buildCompetitivePrompt(brand, categoryBase),
   };
 
-  // ── Run all 4 prompts in parallel ──
   const [awarenessResults, posResults, recResults, compResults] = await Promise.all([
     runAllModels(prompts.awareness),
     runAllModels(prompts.positioning),
@@ -323,72 +496,91 @@ async function processAudit(auditId: string, brand: string, category: string) {
     runAllModels(prompts.competitive),
   ]);
 
-  // ── Extract all 16 responses in parallel ──
-  const [awarenessExtractions, posExtractions, recExtractions, compExtractions] = await Promise.all([
-    Promise.all(awarenessResults.map((raw) =>
-      raw.error ? Promise.resolve(null) : extractJSON(
-        `Given this LLM response about the brand "${brand}", extract the following as JSON only, no markdown:\n{\n  "brand_recognized": true/false,\n  "description": "1-sentence summary of how the model described the brand, or null if not recognized",\n  "accuracy_score": 1-5,\n  "recognition_strength": "strong" | "weak" | "unknown"\n}\n\nResponse to analyze:\n${raw.text}`
-      )
-    )),
-    Promise.all(posResults.map((raw) =>
-      raw.error ? Promise.resolve(null) : extractJSON(
-        `Given this LLM response about how "${brand}" is positioned in the market, extract the following as JSON only, no markdown:\n{\n  "target_customer": "one sentence describing who the model thinks the brand targets",\n  "value_proposition": "one sentence describing the brand's main value prop as the model understands it",\n  "differentiation": "one sentence on how the model thinks the brand differentiates",\n  "positioning_accuracy": 1-5,\n  "positioning_strength": "strong" | "weak" | "confused",\n  "positioning_note": "one sentence flagging anything inaccurate or missing"\n}\n\nResponse to analyze:\n${raw.text}`
-      )
-    )),
-    Promise.all(recResults.map((raw) =>
-      raw.error ? Promise.resolve(null) : extractJSON(
-        `Given this LLM response recommending ${categoryBase} tools, extract the following as JSON only, no markdown:\n{\n  "tools_mentioned": ["tool1", "tool2"],\n  "brand_position": null or integer (1-5),\n  "brand_mentioned": true/false,\n  "tools_above_brand": ["tool1"]\n}\n\nResponse to analyze:\n${raw.text}`
-      )
-    )),
-    Promise.all(compResults.map((raw) =>
-      raw.error ? Promise.resolve(null) : extractJSON(
-        `Given this LLM response comparing ${brand} to competitors, extract the following as JSON only, no markdown:\n{\n  "wins": ["win1", "win2", "win3"],\n  "losses": ["loss1", "loss2", "loss3"],\n  "sentiment": "positive" | "neutral" | "negative",\n  "sentiment_note": "one sentence explaining the overall tone"\n}\n\nResponse to analyze:\n${raw.text}`
-      )
-    )),
-  ]);
+  // ── Build scored model arrays ──
 
-  // ── Build model result arrays ──
-  const modelAwareness: any[] = awarenessResults.map((raw, i) => {
-    if (raw.error) return { model: MODEL_NAMES[i], known: false, status: "error", description: "Model unavailable", score: 0 };
-    const extracted = awarenessExtractions[i];
-    const score = scoreAwareness(extracted);
-    return { model: MODEL_NAMES[i], known: extracted?.brand_recognized ?? false, status: extracted?.recognition_strength ?? "unknown", description: extracted?.description ?? raw.text.slice(0, 200), score };
+  const modelAwareness = awarenessResults.map((raw, i) => {
+    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], known: false, description: null, scores: { recognition: 0, accuracy: 0, detail: 0, confidence: 0 }, score: 0 };
+    const { score, subscores } = scoreAwareness(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      known: raw.data.brand_recognized ?? false,
+      description: raw.data.description ?? null,
+      scores: subscores,
+      score,
+    };
   });
 
-  const modelPositioning: any[] = posResults.map((raw, i) => {
-    if (raw.error) return { model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", accuracyScore: 1, note: "Model unavailable", score: 0 };
-    const extracted = posExtractions[i];
-    const score = scorePositioning(extracted);
-    return { model: MODEL_NAMES[i], strength: extracted?.positioning_strength ?? "confused", targetCustomer: extracted?.target_customer ?? "", valueProp: extracted?.value_proposition ?? "", differentiation: extracted?.differentiation ?? "", accuracyScore: extracted?.positioning_accuracy ?? 1, note: extracted?.positioning_note ?? "", score };
+  const modelPositioning = posResults.map((raw, i) => {
+    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", scores: { targetClarity: 0, valuePropAccuracy: 0, differentiationClarity: 0 }, note: "Model unavailable", score: 0 };
+    const awarenessKnown = modelAwareness[i]?.known ?? false;
+    const score = scorePositioning(raw.data, awarenessKnown);
+    return {
+      model: MODEL_NAMES[i],
+      strength: raw.data.positioning_strength ?? "confused",
+      targetCustomer: raw.data.target_customer ?? "",
+      valueProp: raw.data.value_proposition ?? "",
+      differentiation: raw.data.differentiation ?? "",
+      scores: {
+        targetClarity: clamp(raw.data.target_clarity ?? 0),
+        valuePropAccuracy: clamp(raw.data.value_prop_accuracy ?? 0),
+        differentiationClarity: clamp(raw.data.differentiation_clarity ?? 0),
+      },
+      note: raw.data.note ?? "",
+      score,
+    };
   });
 
-  const modelRecommendation: any[] = recResults.map((raw, i) => {
-    if (raw.error) return { model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [], fullList: [], score: 0 };
-    const extracted = recExtractions[i];
-    const score = scoreRecommendation(extracted);
-    return { model: MODEL_NAMES[i], rank: extracted?.brand_position ?? null, listed: extracted?.brand_mentioned ?? false, aboveYou: extracted?.tools_above_brand ?? [], fullList: extracted?.tools_mentioned ?? [], score };
+  const toStringArray = (arr: any): string[] =>
+    Array.isArray(arr) ? arr.map((x) => (typeof x === "string" ? x : String(x?.name ?? x ?? ""))).filter(Boolean) : [];
+
+  const modelRecommendation = recResults.map((raw, i) => {
+    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [] as string[], fullList: [] as string[], score: 0 };
+    const score = scoreRecommendation(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      rank: raw.data.brand_position ?? null,
+      listed: raw.data.brand_mentioned ?? false,
+      aboveYou: toStringArray(raw.data.tools_above_brand),
+      fullList: toStringArray(raw.data.tools_mentioned),
+      score,
+    };
   });
 
-  const modelCompetitive: any[] = compResults.map((raw, i) => {
-    if (raw.error) return { model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 };
-    const extracted = compExtractions[i];
-    const score = scoreCompetitive(extracted);
-    return { model: MODEL_NAMES[i], sentiment: extracted?.sentiment ?? "neutral", note: extracted?.sentiment_note ?? "", wins: extracted?.wins ?? [], losses: extracted?.losses ?? [], score };
+  const modelCompetitive = compResults.map((raw, i) => {
+    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 };
+    const score = scoreCompetitive(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      sentiment: raw.data.sentiment ?? "neutral",
+      note: raw.data.sentiment_note ?? "",
+      wins: raw.data.wins ?? [],
+      losses: raw.data.losses ?? [],
+      score,
+    };
   });
 
-  // ── Calculate scores (4 dimensions) ──
-  const avgAwareness = average(modelAwareness.map((m) => m.score));
-  const avgPositioning = average(modelPositioning.map((m) => m.score));
-  const avgRecommendation = average(modelRecommendation.map((m) => m.score));
-  const avgCompetitive = average(modelCompetitive.map((m) => m.score));
+  // ── Dimension scores with consistency bonus ──
 
-  const perModelScores = MODEL_NAMES.map((_, i) => {
-    return average([modelAwareness[i].score, modelPositioning[i].score, modelRecommendation[i].score, modelCompetitive[i].score]);
-  });
-  const overallScore = Math.round(average(perModelScores));
+  const awarenessScores = modelAwareness.map((m) => m.score);
+  const positioningScores = modelPositioning.map((m) => m.score);
+  const recScores = modelRecommendation.map((m) => m.score);
+  const compScores = modelCompetitive.map((m) => m.score);
+
+  const validAvg = (arr: number[]) => {
+    const valid = arr.filter((n) => n > 0);
+    return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
+  };
+
+  const avgAwareness = Math.round(validAvg(awarenessScores) + computeConsistency(awarenessScores));
+  const avgPositioning = Math.round(validAvg(positioningScores) + computeConsistency(positioningScores));
+  const avgRecommendation = Math.round(validAvg(recScores) + computeConsistency(recScores));
+  const avgCompetitive = Math.round(validAvg(compScores) + computeConsistency(compScores));
+
+  const overallScore = clamp(Math.round((avgAwareness + avgPositioning + avgRecommendation + avgCompetitive) / 4));
   const overallVerdict = getOverallVerdict(overallScore);
 
   // ── Share of voice ──
+
   const toolCounts: Record<string, number> = {};
   for (const m of modelRecommendation) {
     for (const tool of m.fullList) {
@@ -398,49 +590,50 @@ async function processAudit(auditId: string, brand: string, category: string) {
   }
   const totalMentions = Object.values(toolCounts).reduce((a, b) => a + b, 0) || 1;
   const shareOfVoice = Object.entries(toolCounts)
-    .map(([name, count]) => ({ name: capitalizeFirst(name), pct: Math.round((count / totalMentions) * 100) }))
+    .map(([name, count]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), pct: Math.round((count / totalMentions) * 100) }))
     .sort((a, b) => b.pct - a.pct)
     .slice(0, 5);
 
-  // ── Aggregate wins/losses ──
+  // ── Aggregate competitive data ──
+
   const allWins = modelCompetitive.flatMap((m) => m.wins).filter(Boolean);
   const allLosses = modelCompetitive.flatMap((m) => m.losses).filter(Boolean);
   const topWins = [...new Set(allWins)].slice(0, 3);
   const topLosses = [...new Set(allLosses)].slice(0, 3);
 
-  // ── Quadrant ──
   const quadrant = {
-    awarenessScore: Math.round(avgAwareness),
-    recommendationScore: Math.round(avgRecommendation),
+    awarenessScore: avgAwareness,
+    recommendationScore: avgRecommendation,
     ...getQuadrant(avgAwareness, avgRecommendation),
   };
 
-  // ── Insight generation ──
+  // ── Insights ──
+
   const awarenessInsight = generateAwarenessInsight(modelAwareness, brand);
   const recInsight = generateRecInsight(modelRecommendation, brand);
   const compInsight = generateCompInsight(modelCompetitive, brand);
 
-  // ── Positioning insight via Claude ──
   let positioningInsight = "";
   try {
+    const model = getGenAI().getGenerativeModel({ model: "gemini-2.5-flash" });
     const res = await withTimeout(
-      getAnthropic().messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 200,
-        messages: [{
+      model.generateContent({
+        contents: [{
           role: "user",
-          content: `Based on how 4 LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
+          parts: [{
+            text: `Based on how 4 LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
+          }],
         }],
       }),
-      CLAUDE_TIMEOUT_MS
+      TIMEOUT_MS
     );
-    positioningInsight = res.content[0]?.type === "text" ? res.content[0].text : "";
+    positioningInsight = res.response.text().trim();
   } catch {
     positioningInsight = `Mixed positioning signals across models for ${brand}.`;
   }
 
-  // ── Final result object ──
-  const posScore = Math.round(avgPositioning);
+  // ── Result ──
+
   const result = {
     brand,
     category,
@@ -450,37 +643,38 @@ async function processAudit(auditId: string, brand: string, category: string) {
     overallSub: getVerdictSub(overallVerdict, brand),
     quadrant,
     awareness: {
-      score: Math.round(avgAwareness),
-      label: getScoreLabel(Math.round(avgAwareness), "awareness"),
-      color: getScoreColor(Math.round(avgAwareness)),
+      score: avgAwareness,
+      label: getScoreLabel(avgAwareness, "awareness"),
+      color: getScoreColor(avgAwareness),
       modelResults: modelAwareness.map((m) => ({
         model: m.model,
         known: m.known,
-        status: m.status,
         description: m.description,
+        scores: m.scores,
       })),
-      accuracyScore: parseFloat((modelAwareness.filter((m) => m.status !== "error").reduce((s, m) => s + (m.score / 18), 0) / Math.max(modelAwareness.filter((m) => m.status !== "error").length, 1)).toFixed(1)),
-      accuracyFlag: awarenessInsight,
+      consistencyBonus: computeConsistency(awarenessScores),
+      insight: awarenessInsight,
     },
     positioning: {
-      score: posScore,
-      label: getScoreLabel(posScore, "positioning"),
-      color: getPositioningColor(posScore),
+      score: avgPositioning,
+      label: getScoreLabel(avgPositioning, "positioning"),
+      color: getScoreColor(avgPositioning),
       modelResults: modelPositioning.map((m) => ({
         model: m.model,
         strength: m.strength,
         targetCustomer: m.targetCustomer,
         valueProp: m.valueProp,
         differentiation: m.differentiation,
-        accuracyScore: m.accuracyScore,
+        scores: m.scores,
         note: m.note,
       })),
+      consistencyBonus: computeConsistency(positioningScores),
       insight: positioningInsight,
     },
     recommendation: {
-      score: Math.round(avgRecommendation),
-      label: getScoreLabel(Math.round(avgRecommendation), "recommendation"),
-      color: getScoreColor(Math.round(avgRecommendation)),
+      score: avgRecommendation,
+      label: getScoreLabel(avgRecommendation, "recommendation"),
+      color: getScoreColor(avgRecommendation),
       promptUsed: prompts.recommendation,
       modelResults: modelRecommendation.map((m) => ({
         model: m.model,
@@ -490,12 +684,13 @@ async function processAudit(auditId: string, brand: string, category: string) {
         fullList: m.fullList,
       })),
       shareOfVoice,
+      consistencyBonus: computeConsistency(recScores),
       insight: recInsight,
     },
     competitive: {
-      score: Math.round(avgCompetitive),
-      label: getScoreLabel(Math.round(avgCompetitive), "competitive"),
-      color: getScoreColor(Math.round(avgCompetitive)),
+      score: avgCompetitive,
+      label: getScoreLabel(avgCompetitive, "competitive"),
+      color: getScoreColor(avgCompetitive),
       competitor: findTopCompetitor(modelRecommendation, brand),
       wins: topWins,
       losses: topLosses,
@@ -505,11 +700,11 @@ async function processAudit(auditId: string, brand: string, category: string) {
         note: m.note,
       })),
       overallSentiment: getMajoritySentiment(modelCompetitive),
+      consistencyBonus: computeConsistency(compScores),
       insight: compInsight,
     },
   };
 
-  // Step 7 — Save to Supabase
   await getSupabase()
     .from("audits")
     .update({
@@ -523,33 +718,21 @@ async function processAudit(auditId: string, brand: string, category: string) {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-async function runAllModels(prompt: string): Promise<Array<{ text: string; error?: boolean; errorMsg?: string }>> {
-  const results = await Promise.all([
-    callOpenAI(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
-    callPerplexity(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
-    callClaude(prompt).then((text) => ({ text })).catch((e) => { console.error("Claude error:", e?.message); return { text: "", error: true as const, errorMsg: e?.message }; }),
-    callGemini(prompt).then((text) => ({ text })).catch((e) => ({ text: "", error: true as const, errorMsg: e?.message })),
-  ]);
-  return results;
-}
-
 function average(nums: number[]): number {
   if (nums.length === 0) return 0;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-
-function capitalizeFirst(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function findTopCompetitor(modelRec: any[], brand: string): string {
   const brandLower = brand.toLowerCase();
   const competitors: Record<string, number> = {};
   for (const m of modelRec) {
-    for (const tool of m.fullList) {
-      const t = tool.toLowerCase().trim();
+    for (const item of m.fullList) {
+      const name = typeof item === "string" ? item : String(item?.name ?? item ?? "");
+      if (!name) continue;
+      const t = name.toLowerCase().trim();
       if (t !== brandLower) {
-        competitors[tool.trim()] = (competitors[tool.trim()] || 0) + 1;
+        competitors[name.trim()] = (competitors[name.trim()] || 0) + 1;
       }
     }
   }
@@ -560,40 +743,48 @@ function findTopCompetitor(modelRec: any[], brand: string): string {
 function getMajoritySentiment(models: any[]): string {
   const counts: Record<string, number> = {};
   for (const m of models) {
-    counts[m.sentiment] = (counts[m.sentiment] || 0) + 1;
+    if (m.sentiment && m.sentiment !== "unknown") {
+      counts[m.sentiment] = (counts[m.sentiment] || 0) + 1;
+    }
   }
   return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "neutral";
 }
 
 function generateAwarenessInsight(models: any[], brand: string): string {
-  const strong = models.filter((m) => m.status === "strong").map((m) => m.model);
-  const weak = models.filter((m) => m.status === "weak").map((m) => m.model);
-  const unknown = models.filter((m) => m.status === "unknown" || m.status === "error").map((m) => m.model);
+  const known = models.filter((m) => m.known);
+  const unknown = models.filter((m) => !m.known);
   const parts: string[] = [];
-  if (strong.length > 0) parts.push(`${strong.join(" and ")} describe ${brand} correctly.`);
-  if (weak.length > 0) parts.push(`${weak.join(" and ")} have partial or outdated knowledge.`);
-  if (unknown.length > 0) parts.push(`${unknown.join(" and ")} don't meaningfully recognize the brand.`);
-  return parts.join(" ") || `Mixed awareness across models for ${brand}.`;
+  if (known.length === models.length) {
+    const avgScore = Math.round(average(known.map((m) => m.score)));
+    parts.push(`All ${models.length} models recognize ${brand} (avg score: ${avgScore}/100).`);
+    if (avgScore < 50) parts.push("But descriptions lack depth and accuracy — there's room to improve how AI understands you.");
+  } else if (known.length > 0) {
+    parts.push(`${known.map((m) => m.model).join(" and ")} recognize ${brand}.`);
+    parts.push(`${unknown.map((m) => m.model).join(" and ")} ${unknown.length === 1 ? "doesn't" : "don't"} meaningfully recognize the brand.`);
+  } else {
+    parts.push(`No model recognizes ${brand}. You're invisible in AI search.`);
+  }
+  return parts.join(" ");
 }
 
 function generateRecInsight(models: any[], brand: string): string {
-  const notListed = models.filter((m) => !m.listed).map((m) => m.model);
-  const topPick = models.filter((m) => m.rank === 1).map((m) => m.model);
+  const listed = models.filter((m) => m.listed);
+  const notListed = models.filter((m) => !m.listed);
   const parts: string[] = [];
-  if (notListed.length > 0) parts.push(`${brand} is invisible on ${notListed.join(" and ")}.`);
-  if (topPick.length > 0) parts.push(`You lead on ${topPick.join(" and ")}.`);
+  if (notListed.length > 0) parts.push(`${brand} is not listed on ${notListed.map((m) => m.model).join(" or ")}.`);
+  const topPicks = listed.filter((m) => m.rank === 1);
+  if (topPicks.length > 0) parts.push(`You're the top pick on ${topPicks.map((m) => m.model).join(" and ")}.`);
   const topCompetitor = findTopCompetitor(models, brand);
   if (topCompetitor !== "competitors") parts.push(`${topCompetitor} is your biggest threat in AI recommendations.`);
   return parts.join(" ") || `Mixed recommendation presence for ${brand}.`;
 }
 
 function generateCompInsight(models: any[], brand: string): string {
-  const negative = models.filter((m) => m.sentiment === "negative").map((m) => m.model);
-  const positive = models.filter((m) => m.sentiment === "positive").map((m) => m.model);
+  const negative = models.filter((m) => m.sentiment === "negative");
+  const positive = models.filter((m) => m.sentiment === "positive");
   const parts: string[] = [];
-  if (negative.length > 0) parts.push(`${negative.join(" and ")} have a negative view of ${brand}.`);
-  if (positive.length > 0) parts.push(`${positive.join(" and ")} favor ${brand}.`);
-  if (negative.length === 0 && positive.length === 0) parts.push(`Models have a neutral view of ${brand} overall.`);
+  if (negative.length > 0) parts.push(`${negative.map((m) => m.model).join(" and ")} ${negative.length === 1 ? "has" : "have"} a negative view of ${brand} vs competitors.`);
+  if (positive.length > 0) parts.push(`${positive.map((m) => m.model).join(" and ")} ${positive.length === 1 ? "favors" : "favor"} ${brand}.`);
+  if (negative.length === 0 && positive.length === 0) parts.push(`Models have a neutral view of ${brand} vs competitors.`);
   return parts.join(" ");
 }
-
