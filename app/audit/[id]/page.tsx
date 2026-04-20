@@ -347,10 +347,10 @@ function AuditResultsView({
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 240, flexGrow: 1 }}>
             {[
-              { label: "Brand Awareness (30%)", score: awarenessScore, color: fixColor(d.awareness.color), ready: true },
-              { label: "Brand Positioning (20%)", score: positioningScore, color: fixColor(d.positioning?.color ?? "#64748b"), ready: !!d.positioning },
-              { label: "Recommendation Rank (35%)", score: recommendationScore, color: fixColor(d.recommendation?.color ?? "#64748b"), ready: !!d.recommendation },
-              { label: "Competitive Context (15%)", score: competitiveScore, color: fixColor(d.competitive?.color ?? "#64748b"), ready: !!d.competitive },
+              { label: "Brand Awareness", score: awarenessScore, color: fixColor(d.awareness.color), ready: true },
+              { label: "Brand Positioning", score: positioningScore, color: fixColor(d.positioning?.color ?? "#64748b"), ready: !!d.positioning },
+              { label: "Recommendation Rank", score: recommendationScore, color: fixColor(d.recommendation?.color ?? "#64748b"), ready: !!d.recommendation },
+              { label: "Competitive Context", score: competitiveScore, color: fixColor(d.competitive?.color ?? "#64748b"), ready: !!d.competitive },
             ].map((dim) => (
               <div key={dim.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.05em", color: "#64748b", width: 140, textAlign: "right", lineHeight: 1.4, flexShrink: 0 }}>{dim.label.toUpperCase()}</div>
