@@ -2,6 +2,20 @@ export const metadata = {
   title: "Free GEO Audit Tool — LLM Visibility",
   description:
     "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask. Free tool.",
+  openGraph: {
+    title: "Free GEO Audit Tool — LLM Visibility",
+    description:
+      "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask. Free tool.",
+    type: "website",
+    images: [{ url: "/images/thumbnail.png" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Free GEO Audit Tool — LLM Visibility",
+    description:
+      "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask. Free tool.",
+    images: ["/images/thumbnail.png"],
+  },
 };
 
 export default function RootLayout({
