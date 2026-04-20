@@ -2,127 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { ScoreRing, ModelBadge, SectionLabel, Card, CardHeader, InsightBox, PaywallGate } from "@/components/ui";
+import { ScoreRing, ModelBadge, SectionLabel, Card, InsightBox } from "@/components/ui";
+import type { AuditResult, AuditRow, ScoreHistoryEntry } from "@/lib/types";
 
-// ── Types ────────────────────────────────────────────────────
-
-interface AuditResult {
-  brand: string;
-  category: string;
-  auditDate: string;
-  overallScore: number;
-  overallVerdict: string;
-  overallSub: string;
-  quadrant: {
-    awarenessScore: number;
-    recommendationScore: number;
-    label: string;
-    description: string;
-  };
-  awareness: {
-    score: number;
-    label: string;
-    color: string;
-    modelResults: Array<{
-      model: string;
-      known: boolean;
-      description: string | null;
-      scores?: { recognition: number; accuracy: number; detail: number; confidence: number };
-    }>;
-    consistencyBonus?: number;
-    insight: string;
-    accuracyScore?: number;
-    accuracyFlag?: string;
-  };
-  positioning: {
-    score: number;
-    label: string;
-    color: string;
-    modelResults: Array<{
-      model: string;
-      strength: string;
-      targetCustomer: string;
-      valueProp: string;
-      differentiation: string;
-      scores?: { targetClarity: number; valuePropAccuracy: number; differentiationClarity: number };
-      accuracyScore?: number;
-      note: string;
-    }>;
-    consistencyBonus?: number;
-    insight: string;
-  };
-  recommendation: {
-    score: number;
-    label: string;
-    color: string;
-    promptUsed: string;
-    modelResults: Array<{
-      model: string;
-      rank: number | null;
-      listed: boolean;
-      aboveYou: string[];
-      fullList: string[];
-    }>;
-    shareOfVoice: Array<{ name: string; pct: number }>;
-    consistencyBonus?: number;
-    insight: string;
-  };
-  competitive: {
-    score: number;
-    label: string;
-    color: string;
-    competitor: string;
-    wins: string[];
-    losses: string[];
-    sentimentPerModel: Array<{
-      model: string;
-      sentiment: string;
-      note: string;
-    }>;
-    overallSentiment: string;
-    consistencyBonus?: number;
-    insight: string;
-  };
-  onlinePresence?: {
-    sources: Array<{
-      domain: string;
-      status: "strong" | "weak" | "missing";
-      note: string;
-      priority: "high" | "medium" | "low";
-    }>;
-    insight: string;
-  } | null;
-  sourceAttribution?: {
-    sources: Array<{
-      domain: string;
-      status: "strong" | "weak" | "missing";
-      note: string;
-      priority: "high" | "medium" | "low";
-    }>;
-    insight: string;
-  } | null;
-  roadmap?: {
-    weeks: Array<{
-      week: string;
-      actions: Array<{
-        action: string;
-        impact: "High" | "Medium" | "Low";
-        category: string;
-      }>;
-    }>;
-    insight: string;
-  } | null;
-}
-
-interface AuditRow {
-  id: string;
-  status: string;
-  result: AuditResult | null;
-  brand: string;
-  category: string;
-  website_url: string | null;
-  unlocked: boolean;
-}
+// Re-export types for local use
+export type { AuditResult, AuditRow };
 
 // ── Quadrant Chart ───────────────────────────────────────────
 
@@ -132,18 +16,25 @@ function QuadrantChart({ awarenessScore, recommendationScore, label }: { awarene
   return (
     <div style={{ padding: "16px 0" }}>
       <div style={{ position: "relative", width: "100%", aspectRatio: "1.6 / 1", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "#e2e8f020" }} />
-        <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: 1, background: "#e2e8f020" }} />
+        {[25, 50, 75].map((pct) => (
+          <div key={`v${pct}`} style={{ position: "absolute", left: `${pct}%`, top: 0, bottom: 0, width: 1, background: pct === 50 ? "#cbd5e1" : "#e2e8f0" }} />
+        ))}
+        {[25, 50, 75].map((pct) => (
+          <div key={`h${pct}`} style={{ position: "absolute", top: `${pct}%`, left: 0, right: 0, height: 1, background: pct === 50 ? "#cbd5e1" : "#e2e8f0" }} />
+        ))}
         {[
           { text: "Ghost", x: "25%", y: "75%" },
           { text: "Lucky", x: "25%", y: "25%" },
           { text: "Visible but Losing", x: "75%", y: "75%" },
           { text: "Dominant", x: "75%", y: "25%" },
-        ].map((q) => (
-          <div key={q.text} style={{ position: "absolute", left: q.x, top: q.y, transform: "translate(-50%, -50%)", fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.05em", color: "#94a3b8", textAlign: "center", pointerEvents: "none" }}>
-            {q.text.toUpperCase()}
-          </div>
-        ))}
+        ].map((q) => {
+          const active = q.text.toLowerCase() === label.toLowerCase();
+          return (
+            <div key={q.text} style={{ position: "absolute", left: q.x, top: q.y, transform: "translate(-50%, -50%)", fontFamily: "'Space Mono', monospace", fontSize: active ? 10 : 9, letterSpacing: "0.05em", color: active ? "#3b82f6" : "#94a3b8", fontWeight: active ? 700 : 400, textAlign: "center", pointerEvents: "none" }}>
+              {q.text.toUpperCase()}
+            </div>
+          );
+        })}
         <div
           style={{
             position: "absolute",
@@ -157,17 +48,40 @@ function QuadrantChart({ awarenessScore, recommendationScore, label }: { awarene
         <div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", fontFamily: "'Space Mono', monospace", fontSize: 8, color: "#94a3b8", letterSpacing: "0.1em" }}>AWARENESS →</div>
         <div style={{ position: "absolute", left: 4, top: "50%", transform: "translateY(-50%) rotate(-90deg)", fontFamily: "'Space Mono', monospace", fontSize: 8, color: "#94a3b8", letterSpacing: "0.1em", whiteSpace: "nowrap" }}>RECOMMENDATION →</div>
       </div>
-      <div style={{ textAlign: "center", marginTop: 8 }}>
-        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#3b82f6", fontWeight: 700 }}>{label.toUpperCase()}</span>
-      </div>
+    </div>
+  );
+}
+
+// ── Score Delta Pill ─────────────────────────────────────────
+
+function ScoreDelta({ scoreHistory, currentScore }: { scoreHistory: ScoreHistoryEntry[]; currentScore: number }) {
+  if (!scoreHistory || scoreHistory.length === 0) return null;
+  const prev = scoreHistory[0];
+  const delta = currentScore - prev.overall_score;
+  if (delta === 0) return null;
+  const positive = delta > 0;
+  return (
+    <div style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "3px 10px", borderRadius: 20,
+      background: positive ? "#3b82f615" : "#f8717115",
+      border: `1px solid ${positive ? "#3b82f630" : "#f8717130"}`,
+      fontFamily: "'Space Mono', monospace", fontSize: 10, fontWeight: 700,
+      color: positive ? "#3b82f6" : "#f87171",
+      marginLeft: 8,
+    }}>
+      {positive ? "▲" : "▼"} {Math.abs(delta)} vs last audit
     </div>
   );
 }
 
 // ── Loading State ────────────────────────────────────────────
 
-function LoadingState({ brand, category }: { brand: string; category: string }) {
-  const models = ["GPT-4o", "Perplexity", "Claude", "Gemini"];
+function LoadingState({ brand, category, phase }: { brand: string; category: string; phase: 1 | 2 }) {
+  const models = ["GPT-4o", "Claude", "Gemini"];
+  const phaseLabel = phase === 1
+    ? "Querying awareness & positioning..."
+    : "Querying recommendations & competitive...";
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "48px 24px", position: "relative", zIndex: 2 }}>
       <div style={{ marginBottom: 40, paddingBottom: 32, borderBottom: "1px solid #e2e8f0" }}>
@@ -180,7 +94,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
         </h1>
         <p style={{ fontSize: 14, color: "#64748b" }}>Category: <span style={{ color: "#475569" }}>{category || "Auto-detecting..."}</span></p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
         {models.map((m, i) => (
           <div key={m} style={{ padding: "24px 20px", background: "#ffffff", border: "1px solid #fbbf2425", borderRadius: 10, textAlign: "center", position: "relative", overflow: "hidden", animation: `fadeUp 0.4s ease ${i * 0.1}s both` }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #fbbf24, transparent)", animation: "scanline 2s linear infinite" }} />
@@ -194,7 +108,7 @@ function LoadingState({ brand, category }: { brand: string; category: string }) 
       </div>
       <div style={{ marginTop: 32, padding: "16px 20px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, textAlign: "center" }}>
         <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#64748b", letterSpacing: "0.1em" }}>
-          Querying LLMs with structured prompts. This takes about 30 seconds.
+          {phaseLabel} This takes about 30 seconds.
         </p>
       </div>
     </div>
@@ -214,17 +128,149 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+// ── Section Loading Skeleton ─────────────────────────────────
+
+function SectionSkeleton({ label }: { label: string }) {
+  return (
+    <div className="fade" style={{ marginBottom: 28 }}>
+      <SectionLabel>{label}</SectionLabel>
+      <div style={{ padding: "32px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, textAlign: "center" }}>
+        <div style={{ width: 28, height: 28, borderRadius: "50%", border: "2px solid #fbbf2440", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fbbf24", animation: "pulse-dot 1.5s ease infinite" }} />
+        </div>
+        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#64748b" }}>SCANNING MODELS...</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Locked Section ───────────────────────────────────────────
+
+function LockedSection({ description, onUnlock, checkingOut }: {
+  description: string;
+  onUnlock: () => void;
+  checkingOut: boolean;
+}) {
+  return (
+    <div style={{ padding: "28px 24px", background: "linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)", border: "1px solid #fbbf2430", borderRadius: 8, textAlign: "center" }}>
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" style={{ marginBottom: 12 }}>
+        <rect x="3" y="11" width="18" height="11" rx="2" stroke="#fbbf24" strokeWidth="2" />
+        <path d="M7 11V7a5 5 0 0 1 9.9-1" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <p style={{ fontSize: 13, color: "#475569", margin: "0 auto 20px", maxWidth: 400, lineHeight: 1.65 }}>
+        {description}
+      </p>
+      <button
+        onClick={onUnlock}
+        disabled={checkingOut}
+        style={{
+          background: checkingOut ? "#64748b" : "#fbbf24", color: "#1e293b", border: "none",
+          padding: "12px 32px", fontFamily: "'Space Mono', monospace",
+          fontSize: 12, fontWeight: 700, letterSpacing: "1.5px",
+          cursor: checkingOut ? "not-allowed" : "pointer", borderRadius: 6,
+          transition: "background 0.2s, transform 0.15s, box-shadow 0.2s",
+          marginBottom: 10,
+        }}
+        onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px #fbbf2450"; } }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+      >
+        {checkingOut ? "REDIRECTING…" : "UNLOCK FULL REPORT FOR $1 →"}
+      </button>
+      <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Space Mono', monospace", letterSpacing: "0.05em" }}>
+        One-time payment · Instant access · No account needed
+      </div>
+    </div>
+  );
+}
+
+// ── Section Heading (label + badge inline) ───────────────────
+
+function SectionHeading({ label, badge, badgeColor }: {
+  label: string;
+  badge: string;
+  badgeColor: string;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <p style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#64748b", margin: 0 }}>
+        {label}
+      </p>
+      <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${badgeColor}18`, color: badgeColor, fontWeight: 500, flexShrink: 0 }}>
+        {badge}
+      </span>
+    </div>
+  );
+}
+
+function CardDescription({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{ fontSize: 15, fontWeight: 600, color: "#1e293b", marginTop: 0, marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #e2e8f0" }}>
+      {children}
+    </p>
+  );
+}
+
+// ── Perplexity Citations ─────────────────────────────────────
+
+function CitationList({ citations }: { citations: string[] }) {
+  const [open, setOpen] = useState(false);
+  if (!citations || citations.length === 0) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.1em", color: "#3b82f6" }}
+      >
+        <span style={{ fontSize: 10 }}>{open ? "▾" : "▸"}</span>
+        {citations.length} PERPLEXITY SOURCE{citations.length !== 1 ? "S" : ""}
+      </button>
+      {open && (
+        <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 3 }}>
+          {citations.map((url, i) => {
+            let host = url;
+            try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, color: "#3b82f6", textDecoration: "none", fontFamily: "'Space Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}
+                title={url}
+              >
+                {host}
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Full Results ─────────────────────────────────────────────
 
-function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult; websiteUrl: string | null; unlocked: boolean; auditId: string }) {
+function AuditResultsView({
+  d,
+  websiteUrl,
+  unlocked,
+  auditId,
+  isPartial,
+  scoreHistory,
+}: {
+  d: AuditResult;
+  websiteUrl: string | null;
+  unlocked: boolean;
+  auditId: string;
+  isPartial?: boolean;
+  scoreHistory?: ScoreHistoryEntry[];
+}) {
   const [copied, setCopied] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
 
   const shareUrl = typeof window !== "undefined" ? window.location.href.split("?")[0] : "";
   const verdictColor = d.overallScore >= 70 ? "#3b82f6" : d.overallScore >= 45 ? "#fbbf24" : "#f87171";
-  const sovColors = ["#fbbf24", "#f87171", "#64748b", "#94a3b8", "#cbd5e1"];
 
-  // Remap legacy neon greens stored in DB to the design-system blue
   const fixColor = (c: string) => (c === "#00ff87" || c === "#22c55e" || c === "#10b981" ? "#34d399" : c);
   const modelNames = d.awareness.modelResults.map((m) => m.model).join(" · ");
 
@@ -256,7 +302,12 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const paywallTeasers = buildTeasers(d);
+  // Dimension scores — use 0 placeholders when partial
+  const awarenessScore = d.awareness.score;
+  const positioningScore = d.positioning?.score ?? 0;
+  const recommendationScore = d.recommendation?.score ?? 0;
+  const competitiveScore = d.competitive?.score ?? 0;
+
 
   return (
     <div style={{ maxWidth: 920, margin: "0 auto", padding: "48px 24px", position: "relative", zIndex: 2 }}>
@@ -276,25 +327,42 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
 
         {/* Combined score card */}
         <div style={{ padding: "24px 28px", background: "#ffffff", border: `1px solid ${verdictColor}30`, borderRadius: 10, display: "flex", alignItems: "center", gap: 32, flexWrap: "wrap" }}>
-          <ScoreRing score={d.overallScore} size={96} stroke={8} />
+          <div style={{ position: "relative" }}>
+            <ScoreRing score={isPartial ? 0 : d.overallScore} size={96} stroke={8} />
+          </div>
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#64748b", marginBottom: 6 }}>OVERALL LLM VISIBILITY SCORE</div>
-            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(22px, 3vw, 34px)", fontWeight: 800, color: verdictColor, lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 10 }}>{d.overallVerdict}</div>
-            <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, margin: 0 }}>{d.overallSub}</p>
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(22px, 3vw, 34px)", fontWeight: 800, color: isPartial ? "#94a3b8" : verdictColor, lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 4 }}>
+                {isPartial ? "COMPUTING..." : d.overallVerdict}
+              </div>
+              {!isPartial && scoreHistory && scoreHistory.length > 0 && (
+                <ScoreDelta scoreHistory={scoreHistory} currentScore={d.overallScore} />
+              )}
+            </div>
+            {isPartial
+              ? <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>Scanning recommendations &amp; competitive...</p>
+              : <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.6, margin: 0 }}>{d.overallSub}</p>
+            }
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 240, flexGrow: 1 }}>
             {[
-              { label: "Brand Awareness", score: d.awareness.score, color: fixColor(d.awareness.color) },
-              { label: "Brand Positioning", score: d.positioning?.score ?? 0, color: fixColor(d.positioning?.color ?? "#64748b") },
-              { label: "Recommendation Rank", score: d.recommendation.score, color: fixColor(d.recommendation.color) },
-              { label: "Competitive Context", score: d.competitive.score, color: fixColor(d.competitive.color) },
+              { label: "Brand Awareness (30%)", score: awarenessScore, color: fixColor(d.awareness.color), ready: true },
+              { label: "Brand Positioning (20%)", score: positioningScore, color: fixColor(d.positioning?.color ?? "#64748b"), ready: !!d.positioning },
+              { label: "Recommendation Rank (35%)", score: recommendationScore, color: fixColor(d.recommendation?.color ?? "#64748b"), ready: !!d.recommendation },
+              { label: "Competitive Context (15%)", score: competitiveScore, color: fixColor(d.competitive?.color ?? "#64748b"), ready: !!d.competitive },
             ].map((dim) => (
               <div key={dim.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.05em", color: "#64748b", width: 110, textAlign: "right", lineHeight: 1.4, flexShrink: 0 }}>{dim.label.toUpperCase()}</div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, letterSpacing: "0.05em", color: "#64748b", width: 140, textAlign: "right", lineHeight: 1.4, flexShrink: 0 }}>{dim.label.toUpperCase()}</div>
                 <div style={{ flex: 1, height: 4, background: "#e2e8f0", borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ width: `${dim.score}%`, height: "100%", background: dim.color, borderRadius: 2, transition: "width 1.2s ease" }} />
+                  {dim.ready
+                    ? <div style={{ width: `${dim.score}%`, height: "100%", background: dim.color, borderRadius: 2, transition: "width 1.2s ease" }} />
+                    : <div style={{ width: "30%", height: "100%", background: "#e2e8f0", borderRadius: 2, animation: "scanline 1.5s linear infinite" }} />
+                  }
                 </div>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: dim.color, width: 28, fontWeight: 700, textAlign: "right", flexShrink: 0 }}>{dim.score}</div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: dim.ready ? dim.color : "#94a3b8", width: 28, fontWeight: 700, textAlign: "right", flexShrink: 0 }}>
+                  {dim.ready ? dim.score : "…"}
+                </div>
               </div>
             ))}
           </div>
@@ -312,9 +380,9 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
 
       {/* ── Section 01: Brand Awareness (FREE) ── */}
       <div className="fade" style={{ marginBottom: 28 }}>
-        <SectionLabel>01 — BRAND AWARENESS</SectionLabel>
+        <SectionHeading label="01 — BRAND AWARENESS" badge={d.awareness.label} badgeColor={fixColor(d.awareness.color)} />
         <Card>
-          <CardHeader icon="◈" title="Brand Awareness" score={d.awareness.score} label={d.awareness.label} color={fixColor(d.awareness.color)} description="Do LLMs know your brand exists and can they describe it accurately?" />
+          <CardDescription>Do LLMs know your brand exists and can they describe it accurately?</CardDescription>
           <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
             {d.awareness.modelResults.map((m, i) => {
               const status = m.known ? "strong" : "unknown";
@@ -343,6 +411,9 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                         ))}
                       </div>
                     )}
+                    {m.model === "Perplexity" && m.citations && m.citations.length > 0 && (
+                      <CitationList citations={m.citations} />
+                    )}
                   </div>
                 </div>
               );
@@ -369,9 +440,9 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
       {/* ── Section 02: Brand Positioning (FREE) ── */}
       {d.positioning && (
         <div className="fade" style={{ marginBottom: 28 }}>
-          <SectionLabel>02 — BRAND POSITIONING</SectionLabel>
+          <SectionHeading label="02 — BRAND POSITIONING" badge={d.positioning.label} badgeColor={fixColor(d.positioning.color)} />
           <Card>
-            <CardHeader icon="◎" title="Brand Positioning" score={d.positioning.score} label={d.positioning.label} color={fixColor(d.positioning.color)} description="How do LLMs understand your market position and value proposition?" />
+            <CardDescription>How do LLMs understand your market position and value proposition?</CardDescription>
             <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
               {d.positioning.modelResults.map((m, i) => {
                 const statusColor = m.strength === "strong" ? "#334155" : m.strength === "weak" ? "#475569" : "#94a3b8";
@@ -416,130 +487,116 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
         </div>
       )}
 
-      {/* ── Section 03: Recommendation Rank (PARTIAL FREE) ── */}
-      <div className="fade" style={{ marginBottom: 28 }}>
-        <SectionLabel>03 — RECOMMENDATION RANK</SectionLabel>
-        <Card>
-          <CardHeader icon="◆" title="Recommendation Rank" score={d.recommendation.score} label={d.recommendation.label} color={fixColor(d.recommendation.color)} description="Do you appear when buyers search for your category?" />
-          <div style={{ marginBottom: 16, padding: "10px 14px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 6 }}>
-            <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b" }}>PROMPT &nbsp;</span>
-            <span style={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>&ldquo;What are the best {d.category} tools?&rdquo;</span>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${d.recommendation.modelResults.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
-            {d.recommendation.modelResults.map((m, i) => (
-              <div key={i} style={{ padding: 14, background: "#f1f5f9", border: `1px solid ${m.listed ? "#fbbf2425" : "#f8717130"}`, borderRadius: 8, textAlign: "center" }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#64748b", marginBottom: 8 }}>{m.model}</div>
-                {m.listed ? (
-                  <>
-                    <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
-                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>of 5 listed</div>
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>&mdash;</div>
-                    <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-          <InsightBox>{d.recommendation.insight}</InsightBox>
-        </Card>
-      </div>
-
-      {/* ── PAYWALL BOUNDARY ── */}
-      {!unlocked && (
-        <PaywallGate onUnlock={handleUnlock} checkingOut={checkingOut} teasers={paywallTeasers} />
+      {/* ── Section 03: Recommendation Rank — skeleton while partial ── */}
+      {isPartial && !d.recommendation && (
+        <SectionSkeleton label="03 — RECOMMENDATION RANK" />
+      )}
+      {isPartial && !d.competitive && (
+        <SectionSkeleton label="04 — COMPETITIVE DEEP DIVE" />
       )}
 
-      {/* ── Premium Sections (only when unlocked) ── */}
-      {unlocked && (
-        <>
-          {/* Share of Voice */}
-          <div className="fade" style={{ marginBottom: 28 }}>
-            <SectionLabel>04 — SHARE OF VOICE</SectionLabel>
-            <Card>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 12 }}>MENTIONS ACROSS ALL MODELS</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-                {d.recommendation.shareOfVoice.map((item, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 12, color: item.name.toLowerCase() === d.brand.toLowerCase() ? "#1e293b" : "#475569", width: 120, flexShrink: 0, fontWeight: item.name.toLowerCase() === d.brand.toLowerCase() ? 600 : 400 }}>{item.name}</span>
-                    <div style={{ flex: 1, height: 4, background: "#e2e8f0", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ width: `${item.pct}%`, height: "100%", background: sovColors[i] || "#94a3b8", borderRadius: 2 }} />
+      {d.recommendation && (
+        <div className="fade" style={{ marginBottom: 28 }}>
+          <SectionHeading label="03 — RECOMMENDATION RANK" badge={d.recommendation.label} badgeColor={fixColor(d.recommendation.color)} />
+          <Card>
+            <CardDescription>Do you appear when buyers search for your category?</CardDescription>
+            <div style={{ marginBottom: 16, padding: "10px 14px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b" }}>PROMPT &nbsp;</span>
+              <span style={{ fontSize: 13, color: "#475569", fontStyle: "italic" }}>&ldquo;What are the best {d.category} tools?&rdquo;</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${d.recommendation.modelResults.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
+              {d.recommendation.modelResults.map((m, i) => (
+                <div key={i} style={{ padding: 14, background: "#f1f5f9", border: `1px solid ${m.listed ? "#fbbf2425" : "#f8717130"}`, borderRadius: 8, textAlign: "center" }}>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.1em", color: "#64748b", marginBottom: 8 }}>{m.model}</div>
+                  {m.listed ? (
+                    <>
+                      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 800, lineHeight: 1, color: "#fbbf24" }}>#{m.rank}</div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>of 5 listed</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 22, fontWeight: 800, color: "#f87171", lineHeight: 1, marginTop: 4 }}>&mdash;</div>
+                      <div style={{ fontSize: 11, color: "#f87171", marginTop: 4 }}>Not listed</div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <InsightBox>{d.recommendation.insight}</InsightBox>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Section 04: Competitive Deep Dive (FREE) ── */}
+      {d.competitive && !isPartial && (
+        <div className="fade" style={{ marginBottom: 28 }}>
+          <SectionHeading label="04 — COMPETITIVE DEEP DIVE" badge={d.competitive.label} badgeColor={fixColor(d.competitive.color)} />
+          <Card>
+            <CardDescription>How do models compare you to your top competitors?</CardDescription>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+              <div style={{ padding: "14px 16px", background: "#f1f5f9", border: "1px solid #3b82f620", borderRadius: 8 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", marginBottom: 12 }}>WHERE YOU WIN</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {d.competitive.wins.length > 0 ? d.competitive.wins.map((w, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <span style={{ color: "#3b82f6", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
+                      <span style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{w}</span>
                     </div>
-                    <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: sovColors[i] || "#94a3b8", width: 36, textAlign: "right" }}>{item.pct}%</span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* Competitive Deep Dive */}
-          <div className="fade" style={{ marginBottom: 28 }}>
-            <SectionLabel>05 — COMPETITIVE DEEP DIVE</SectionLabel>
-            <Card>
-              <CardHeader icon="◇" title="Competitive Context" score={d.competitive.score} label={d.competitive.label} color={fixColor(d.competitive.color)} description="How do models compare you to your top competitors?" />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-                <div style={{ padding: "14px 16px", background: "#f1f5f9", border: "1px solid #3b82f620", borderRadius: 8 }}>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#3b82f6", marginBottom: 12 }}>WHERE YOU WIN</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {d.competitive.wins.length > 0 ? d.competitive.wins.map((w, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ color: "#3b82f6", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✓</span>
-                        <span style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{w}</span>
-                      </div>
-                    )) : <span style={{ fontSize: 13, color: "#64748b" }}>No clear wins identified.</span>}
-                  </div>
-                </div>
-                <div style={{ padding: "14px 16px", background: "#f1f5f9", border: "1px solid #f8717120", borderRadius: 8 }}>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>WHERE YOU LOSE</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {d.competitive.losses.length > 0 ? d.competitive.losses.map((l, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
-                        <span style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{l}</span>
-                      </div>
-                    )) : <span style={{ fontSize: 13, color: "#64748b" }}>No clear losses identified.</span>}
-                  </div>
+                  )) : <span style={{ fontSize: 13, color: "#64748b" }}>No clear wins identified.</span>}
                 </div>
               </div>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 10 }}>SENTIMENT PER MODEL</div>
-                <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                  <thead>
-                    <tr>
-                      {["MODEL", "SENTIMENT", "NOTE"].map((h) => (
-                        <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#64748b", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.competitive.sentimentPerModel.map((row, i) => {
-                      const sColors: Record<string, string> = { positive: "#3b82f6", neutral: "#fbbf24", negative: "#f87171" };
-                      const c = sColors[row.sentiment] || "#64748b";
-                      return (
-                        <tr key={i}>
-                          <td style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>{row.model}</td>
-                          <td style={{ padding: "10px 0", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>
-                            <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>{row.sentiment}</span>
-                          </td>
-                          <td style={{ fontSize: 13, color: "#475569", padding: "10px 0 10px 12px", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>{row.note}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div style={{ padding: "14px 16px", background: "#f1f5f9", border: "1px solid #f8717120", borderRadius: 8 }}>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#f87171", marginBottom: 12 }}>WHERE YOU LOSE</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {d.competitive.losses.length > 0 ? d.competitive.losses.map((l, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                      <span style={{ color: "#f87171", fontSize: 11, marginTop: 2, flexShrink: 0 }}>✗</span>
+                      <span style={{ fontSize: 13, color: "#475569", lineHeight: 1.5 }}>{l}</span>
+                    </div>
+                  )) : <span style={{ fontSize: 13, color: "#64748b" }}>No clear losses identified.</span>}
+                </div>
               </div>
-              <InsightBox>{d.competitive.insight}</InsightBox>
-            </Card>
-          </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 10 }}>SENTIMENT PER MODEL</div>
+              <table style={{ borderCollapse: "collapse", width: "100%" }}>
+                <thead>
+                  <tr>
+                    {["MODEL", "SENTIMENT", "NOTE"].map((h) => (
+                      <th key={h} style={{ fontSize: 11, fontWeight: 500, color: "#64748b", textAlign: "left", padding: "0 0 10px", fontFamily: "'Space Mono', monospace", letterSpacing: "0.1em" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.competitive.sentimentPerModel.map((row, i) => {
+                    const sColors: Record<string, string> = { positive: "#3b82f6", neutral: "#fbbf24", negative: "#f87171" };
+                    const c = sColors[row.sentiment] || "#64748b";
+                    return (
+                      <tr key={i}>
+                        <td style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, padding: "10px 0", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>{row.model}</td>
+                        <td style={{ padding: "10px 0", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>
+                          <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${c}18`, color: c, fontWeight: 500 }}>{row.sentiment}</span>
+                        </td>
+                        <td style={{ fontSize: 13, color: "#475569", padding: "10px 0 10px 12px", borderTop: "1px solid #e2e8f0", verticalAlign: "top" }}>{row.note}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <InsightBox>{d.competitive.insight}</InsightBox>
+          </Card>
+        </div>
+      )}
 
-          {/* Online Presence */}
-          <div className="fade" style={{ marginBottom: 28 }}>
-            <SectionLabel>06 — WHERE AI LEARNS ABOUT YOU</SectionLabel>
-            <Card>
-              <CardHeader icon="◉" title="Online Presence" score={d.awareness.score} label={onlinePresenceData ? "Analyzed" : "Generating"} color="#3b82f6" description="Which platforms and sources feed LLMs information about your brand?" />
-              {onlinePresenceData ? (
+      {/* ── 06 — Online Presence ── */}
+      {!isPartial && (
+        <div className="fade" style={{ marginBottom: 28 }}>
+          <SectionHeading label="06 — WHERE AI LEARNS ABOUT YOU" badge={unlocked ? (onlinePresenceData ? "Analyzed" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
+          <Card>
+            <CardDescription>Which platforms and sources feed LLMs information about your brand?</CardDescription>
+            {unlocked ? (
+              onlinePresenceData ? (
                 <>
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 12 }}>CITATION SOURCES</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
@@ -567,16 +624,26 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#64748b" }}>SEARCHING THE WEB FOR YOUR BRAND...</div>
                   <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 8 }}>Perplexity is scanning review sites, forums, and directories. Updates automatically.</div>
                 </div>
-              )}
-            </Card>
-          </div>
+              )
+            ) : (
+              <LockedSection
+                description="See exactly which review sites, communities, and directories are feeding LLMs about your brand and where you're invisible."
+                onUnlock={handleUnlock}
+                checkingOut={checkingOut}
+              />
+            )}
+          </Card>
+        </div>
+      )}
 
-          {/* 30-Day Roadmap */}
-          <div className="fade" style={{ marginBottom: 28 }}>
-            <SectionLabel>07 — 30-DAY FIX ROADMAP</SectionLabel>
-            <Card>
-              <CardHeader icon="◈" title="30-Day Roadmap" score={d.overallScore} label={d.roadmap ? "Ready" : "Generating"} color="#3b82f6" description="A prioritized, week-by-week action plan built from your audit results." />
-              {d.roadmap ? (
+      {/* ── 07 — 30-Day Roadmap ── */}
+      {!isPartial && (
+        <div className="fade" style={{ marginBottom: 28 }}>
+          <SectionHeading label="07 — 30-DAY FIX ROADMAP" badge={unlocked ? (d.roadmap ? "Ready" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
+          <Card>
+            <CardDescription>A prioritized, week-by-week action plan built from your audit results.</CardDescription>
+            {unlocked ? (
+              d.roadmap ? (
                 <>
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 12 }}>WEEK-BY-WEEK ACTIONS</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
@@ -605,10 +672,16 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
                   <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.15em", color: "#64748b" }}>GENERATING YOUR ROADMAP...</div>
                   <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 8 }}>Building a personalized action plan. Updates automatically.</div>
                 </div>
-              )}
-            </Card>
-          </div>
-        </>
+              )
+            ) : (
+              <LockedSection
+                description="Every action is ranked by impact, sequenced by week, and built specifically from your audit results."
+                onUnlock={handleUnlock}
+                checkingOut={checkingOut}
+              />
+            )}
+          </Card>
+        </div>
       )}
 
       {/* ── Footer CTA ── */}
@@ -644,7 +717,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
       </div>
 
       {/* ── AI Visibility Matrix ── */}
-      {d.quadrant && (
+      {d.quadrant && !isPartial && (
         <div className="fade" style={{ marginTop: 28, padding: "16px 20px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10 }}>
           <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.15em", color: "#64748b", marginBottom: 4 }}>AI VISIBILITY MATRIX</div>
           <QuadrantChart awarenessScore={d.quadrant.awarenessScore} recommendationScore={d.quadrant.recommendationScore} label={d.quadrant.label} />
@@ -653,25 +726,6 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId }: { d: AuditResult
       )}
     </div>
   );
-}
-
-// ── Teaser Builder ───────────────────────────────────────────
-
-function buildTeasers(_d: AuditResult): { title: string; body: string }[] {
-  return [
-    {
-      title: "How does your brand stack up against competitors in AI?",
-      body: "Unlock your full Competitive Context report. See where each LLM thinks you win and lose, sentiment breakdowns per model, and the gaps your competitors are exploiting.",
-    },
-    {
-      title: "Where do LLMs get their information about you?",
-      body: "Unlock your full Source Attribution report. See exactly which sites are feeding LLMs information about your brand and where you're missing vs competitors.",
-    },
-    {
-      title: "Know what to fix. Know when to fix it.",
-      body: "Unlock your personalized 30-day roadmap. Every action is ranked by impact, sequenced by week, and built specifically from your audit results.",
-    },
-  ];
 }
 
 // ── Main Page Component ──────────────────────────────────────
@@ -711,6 +765,11 @@ export default function AuditPage() {
     return () => clearInterval(interval);
   }, [audit, fetchAudit]);
 
+  // Determine current loading phase based on what partial data is available
+  const loadingPhase: 1 | 2 = (audit?.result?.awareness) ? 2 : 1;
+  // Phase 1 data is ready but phase 2 (recommendation) still pending
+  const isPartial = audit?.status === "pending" && !!audit?.result?.awareness;
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "'Inter', system-ui, sans-serif", color: "#1e293b", padding: 0 }}>
       <style>{`
@@ -743,11 +802,28 @@ export default function AuditPage() {
       {error ? (
         <ErrorState onRetry={() => (window.location.href = "/")} />
       ) : !audit ? (
-        <LoadingState brand="..." category="..." />
-      ) : audit.status === "pending" ? (
-        <LoadingState brand={audit.brand} category={audit.category} />
+        <LoadingState brand="..." category="..." phase={1} />
+      ) : audit.status === "pending" && !audit.result?.awareness ? (
+        <LoadingState brand={audit.brand} category={audit.category} phase={1} />
+      ) : isPartial && audit.result ? (
+        <AuditResultsView
+          d={audit.result}
+          websiteUrl={audit.website_url}
+          unlocked={audit.unlocked ?? false}
+          auditId={audit.id}
+          isPartial={true}
+          scoreHistory={audit.scoreHistory}
+        />
       ) : audit.status === "complete" && audit.result ? (
-        <AuditResultsView d={audit.result} websiteUrl={audit.website_url} unlocked={audit.unlocked ?? false} auditId={audit.id} />
+        <AuditResultsView
+          d={audit.result}
+          websiteUrl={audit.website_url}
+          unlocked={audit.unlocked ?? false}
+          auditId={audit.id}
+          scoreHistory={audit.scoreHistory}
+        />
+      ) : audit.status === "pending" ? (
+        <LoadingState brand={audit.brand} category={audit.category} phase={loadingPhase} />
       ) : (
         <ErrorState onRetry={() => (window.location.href = "/")} />
       )}

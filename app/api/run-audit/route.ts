@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import type { AuditResult, CompetitorBenchmark } from "@/lib/types";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -38,6 +39,10 @@ function clamp(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+function safeNum(val: unknown): number {
+  return Number(val) || 0;
+}
+
 function safeParseJSON(text: string): any {
   try { return JSON.parse(text); } catch {}
   let cleaned = text
@@ -51,6 +56,24 @@ function safeParseJSON(text: string): any {
     try { return JSON.parse(match[0]); } catch {}
   }
   return null;
+}
+
+// ── Rate Limiting ─────────────────────────────────────────────
+// Simple in-memory per-instance limiter: 3 audits / hour / IP.
+
+const _rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const RATE_LIMIT_MAX = 3;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const timestamps = (_rateLimitMap.get(ip) ?? []).filter(
+    (t) => t > now - RATE_LIMIT_WINDOW_MS
+  );
+  if (timestamps.length >= RATE_LIMIT_MAX) return false;
+  timestamps.push(now);
+  _rateLimitMap.set(ip, timestamps);
+  return true;
 }
 
 // ── Website Scraping ─────────────────────────────────────────
@@ -130,7 +153,10 @@ async function detectCategory(
 const SYSTEM_PROMPT =
   "You are a knowledgeable technology advisor. Answer directly and honestly based on what you actually know. If you don't know something, say so. Always respond with valid JSON only, no markdown fences, no extra text.";
 
-async function callOpenAIJSON(prompt: string): Promise<any> {
+type ModelCallerResult = { parsed: any; citations?: string[] };
+type ModelCaller = (prompt: string) => Promise<ModelCallerResult>;
+
+async function callOpenAIJSON(prompt: string): Promise<ModelCallerResult> {
   const res = await withTimeout(
     getOpenAI().chat.completions.create({
       model: "gpt-4o",
@@ -138,15 +164,15 @@ async function callOpenAIJSON(prompt: string): Promise<any> {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
       ],
-      max_tokens: 500,
+      max_tokens: 1024,
       response_format: { type: "json_object" },
     }),
     TIMEOUT_MS
   );
-  return JSON.parse(res.choices[0]?.message?.content ?? "{}");
+  return { parsed: JSON.parse(res.choices[0]?.message?.content ?? "{}") };
 }
 
-async function callPerplexityJSON(prompt: string): Promise<any> {
+async function callPerplexityJSON(prompt: string): Promise<ModelCallerResult> {
   const res = await withTimeout(
     fetch("https://api.perplexity.ai/chat/completions", {
       method: "POST",
@@ -160,7 +186,7 @@ async function callPerplexityJSON(prompt: string): Promise<any> {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt },
         ],
-        max_tokens: 500,
+        max_tokens: 1024,
       }),
     }).then(async (r) => {
       if (!r.ok) throw new Error(`Perplexity ${r.status}`);
@@ -171,10 +197,11 @@ async function callPerplexityJSON(prompt: string): Promise<any> {
   const text = res.choices?.[0]?.message?.content ?? "{}";
   const parsed = safeParseJSON(text);
   if (!parsed) throw new Error("Perplexity JSON parse failed");
-  return parsed;
+  const citations: string[] = Array.isArray(res.citations) ? res.citations : [];
+  return { parsed, citations };
 }
 
-async function callClaudeJSON(prompt: string): Promise<any> {
+async function callClaudeJSON(prompt: string): Promise<ModelCallerResult> {
   const res = await withTimeout(
     getAnthropic().messages.create({
       model: "claude-sonnet-4-6",
@@ -182,18 +209,17 @@ async function callClaudeJSON(prompt: string): Promise<any> {
       system: SYSTEM_PROMPT + "\nRespond ONLY with the JSON object. No preamble, no explanation, no markdown fences.",
       messages: [
         { role: "user", content: prompt },
-        { role: "assistant", content: "{" },
       ],
     }),
     30_000
   );
-  const text = res.content[0]?.type === "text" ? "{" + res.content[0].text : "{}";
+  const text = res.content[0]?.type === "text" ? res.content[0].text : "{}";
   const parsed = safeParseJSON(text);
   if (!parsed) throw new Error("Claude JSON parse failed");
-  return parsed;
+  return { parsed };
 }
 
-async function callGeminiJSON(prompt: string): Promise<any> {
+async function callGeminiJSON(prompt: string): Promise<ModelCallerResult> {
   const model = getGenAI().getGenerativeModel({
     model: "gemini-2.5-flash",
     generationConfig: { responseMimeType: "application/json" } as any,
@@ -204,23 +230,40 @@ async function callGeminiJSON(prompt: string): Promise<any> {
     }),
     TIMEOUT_MS
   );
-  return JSON.parse(res.response.text());
+  return { parsed: JSON.parse(res.response.text()) };
 }
 
-type ModelCaller = (prompt: string) => Promise<any>;
-const MODEL_NAMES = ["GPT-4o", "Perplexity", "Claude", "Gemini"] as const;
-const MODEL_CALLERS: ModelCaller[] = [callOpenAIJSON, callPerplexityJSON, callClaudeJSON, callGeminiJSON];
+const MODEL_NAMES = ["GPT-4o", "Claude", "Gemini"] as const;
+const MODEL_CALLERS: ModelCaller[] = [callOpenAIJSON, callClaudeJSON, callGeminiJSON];
 
-async function runAllModels(prompt: string): Promise<Array<{ data: any; error?: boolean }>> {
+// ── Retry wrapper ────────────────────────────────────────────
+
+async function runWithRetry(
+  caller: ModelCaller,
+  modelName: string,
+  prompt: string
+): Promise<{ data: any; citations?: string[]; error?: boolean }> {
+  try {
+    const { parsed, citations } = await caller(prompt);
+    return { data: parsed, citations };
+  } catch (firstErr) {
+    console.warn(`[${modelName}] call failed, retrying in 2s:`, (firstErr as Error)?.message);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const { parsed, citations } = await caller(prompt);
+      return { data: parsed, citations };
+    } catch (e) {
+      console.error(`[${modelName}] call failed after retry:`, (e as Error)?.message);
+      return { data: null, error: true };
+    }
+  }
+}
+
+async function runAllModels(
+  prompt: string
+): Promise<Array<{ data: any; citations?: string[]; error?: boolean }>> {
   return Promise.all(
-    MODEL_CALLERS.map((caller) =>
-      caller(prompt)
-        .then((data) => ({ data }))
-        .catch((e) => {
-          console.error("Model call failed:", e?.message);
-          return { data: null, error: true as const };
-        })
-    )
+    MODEL_CALLERS.map((caller, i) => runWithRetry(caller, MODEL_NAMES[i], prompt))
   );
 }
 
@@ -305,13 +348,13 @@ competitive_awareness: 0 = don't know this competitive landscape, 50 = basic und
 
 function scoreAwareness(data: any): { score: number; subscores: { recognition: number; accuracy: number; detail: number; confidence: number } } {
   if (!data || !data.brand_recognized) {
-    const r = clamp(data?.recognition_score ?? 0);
+    const r = clamp(safeNum(data?.recognition_score));
     return { score: Math.round(r * 0.3), subscores: { recognition: r, accuracy: 0, detail: 0, confidence: 0 } };
   }
-  const recognition = clamp(data.recognition_score ?? 50);
-  const accuracy = clamp(data.accuracy_score ?? 50);
-  const detail = clamp(data.detail_score ?? 30);
-  const confidence = clamp(data.confidence_score ?? 50);
+  const recognition = clamp(safeNum(data.recognition_score));
+  const accuracy = clamp(safeNum(data.accuracy_score));
+  const detail = clamp(safeNum(data.detail_score));
+  const confidence = clamp(safeNum(data.confidence_score));
   const score = Math.round((recognition + accuracy + detail + confidence) / 4);
   return { score, subscores: { recognition, accuracy, detail, confidence } };
 }
@@ -319,35 +362,37 @@ function scoreAwareness(data: any): { score: number; subscores: { recognition: n
 function scorePositioning(data: any, awarenessKnown: boolean): number {
   if (!data) return 0;
   if (data.brand_known === false || !awarenessKnown) {
-    const tc = clamp(data.target_clarity ?? 0);
-    const vp = clamp(data.value_prop_accuracy ?? 0);
-    const dc = clamp(data.differentiation_clarity ?? 0);
+    const tc = clamp(safeNum(data.target_clarity));
+    const vp = clamp(safeNum(data.value_prop_accuracy));
+    const dc = clamp(safeNum(data.differentiation_clarity));
     return Math.min(10, Math.round((tc + vp + dc) / 3));
   }
-  const tc = clamp(data.target_clarity ?? 0);
-  const vp = clamp(data.value_prop_accuracy ?? 0);
-  const dc = clamp(data.differentiation_clarity ?? 0);
+  const tc = clamp(safeNum(data.target_clarity));
+  const vp = clamp(safeNum(data.value_prop_accuracy));
+  const dc = clamp(safeNum(data.differentiation_clarity));
   return Math.round((tc + vp + dc) / 3);
 }
 
 function scoreRecommendation(data: any): number {
   if (!data) return 0;
-  if (!data.brand_mentioned) {
-    return 0;
-  }
+  if (!data.brand_mentioned) return 0;
   const pos = data.brand_position;
-  if (!pos || pos < 1 || pos > 5) return 5;
+  if (!pos || pos < 1 || pos > 5) return 0;
   const posScore = clamp(((6 - pos) / 5) * 100);
-  const rs = clamp(data.recommendation_strength ?? 50);
-  const cr = clamp(data.context_relevance ?? 50);
+  const rs = clamp(safeNum(data.recommendation_strength));
+  const cr = clamp(safeNum(data.context_relevance));
   return Math.round(posScore * 0.6 + rs * 0.25 + cr * 0.15);
 }
 
 function scoreCompetitive(data: any): number {
   if (!data) return 0;
-  const ss = clamp(data.sentiment_score ?? 40);
-  const ws = clamp(data.win_specificity ?? 20);
-  const ca = clamp(data.competitive_awareness ?? 20);
+  const hasRealData = (data.sentiment_score != null && data.sentiment_score > 0)
+    || (data.wins && data.wins.length > 0)
+    || (data.losses && data.losses.length > 0);
+  if (!hasRealData) return 0;
+  const ss = clamp(safeNum(data.sentiment_score));
+  const ws = clamp(safeNum(data.win_specificity));
+  const ca = clamp(safeNum(data.competitive_awareness));
   return Math.round((ss + ws + ca) / 3);
 }
 
@@ -424,303 +469,19 @@ function getQuadrant(awarenessScore: number, recommendationScore: number) {
   return { label: "Ghost", description: "Low awareness and low recommendation. Invisible in AI search." };
 }
 
-// ── Main Handler ─────────────────────────────────────────────
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { brand, category: userCategory, websiteUrl } = body;
-
-    if (!brand || !websiteUrl) {
-      return NextResponse.json({ error: "Missing brand or website URL" }, { status: 400 });
-    }
-
-    const scraped = await scrapeWebsite(websiteUrl);
-    const category = userCategory?.trim() || (scraped ? await detectCategory(scraped, brand) : "SaaS");
-
-    const { data: row, error: insertErr } = await getSupabase()
-      .from("audits")
-      .insert({
-        brand,
-        category,
-        website_url: websiteUrl,
-        overall_score: 0,
-        overall_verdict: "pending",
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    if (insertErr || !row) {
-      console.error("Supabase insert error:", insertErr);
-      return NextResponse.json({ error: "Failed to create audit" }, { status: 500 });
-    }
-
-    const auditId = row.id;
-
-    after(async () => {
-      try {
-        await processAudit(auditId, brand, category, scraped);
-      } catch (err) {
-        console.error("Audit processing failed:", err);
-        await getSupabase().from("audits").update({ status: "error" }).eq("id", auditId);
-      }
-    });
-
-    return NextResponse.json({ id: auditId, category });
-  } catch (err) {
-    console.error("run-audit error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-  }
-}
-
-async function processAudit(
-  auditId: string,
-  brand: string,
-  category: string,
-  scraped: { title: string; description: string; content: string } | null
-) {
-  const categoryBase = category.replace(/\s+tools?\s*$/i, "").trim();
-
-  const prompts = {
-    awareness: buildAwarenessPrompt(brand),
-    positioning: buildPositioningPrompt(brand, categoryBase),
-    recommendation: buildRecommendationPrompt(brand, categoryBase),
-    competitive: buildCompetitivePrompt(brand, categoryBase),
-  };
-
-  const [awarenessResults, posResults, recResults, compResults] = await Promise.all([
-    runAllModels(prompts.awareness),
-    runAllModels(prompts.positioning),
-    runAllModels(prompts.recommendation),
-    runAllModels(prompts.competitive),
-  ]);
-
-  // ── Build scored model arrays ──
-
-  const modelAwareness = awarenessResults.map((raw, i) => {
-    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], known: false, description: null, scores: { recognition: 0, accuracy: 0, detail: 0, confidence: 0 }, score: 0 };
-    const { score, subscores } = scoreAwareness(raw.data);
-    return {
-      model: MODEL_NAMES[i],
-      known: raw.data.brand_recognized ?? false,
-      description: raw.data.description ?? null,
-      scores: subscores,
-      score,
-    };
-  });
-
-  const modelPositioning = posResults.map((raw, i) => {
-    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], strength: "confused", targetCustomer: "", valueProp: "", differentiation: "", scores: { targetClarity: 0, valuePropAccuracy: 0, differentiationClarity: 0 }, note: "Model unavailable", score: 0 };
-    const awarenessKnown = modelAwareness[i]?.known ?? false;
-    const score = scorePositioning(raw.data, awarenessKnown);
-    return {
-      model: MODEL_NAMES[i],
-      strength: raw.data.positioning_strength ?? "confused",
-      targetCustomer: raw.data.target_customer ?? "",
-      valueProp: raw.data.value_proposition ?? "",
-      differentiation: raw.data.differentiation ?? "",
-      scores: {
-        targetClarity: clamp(raw.data.target_clarity ?? 0),
-        valuePropAccuracy: clamp(raw.data.value_prop_accuracy ?? 0),
-        differentiationClarity: clamp(raw.data.differentiation_clarity ?? 0),
-      },
-      note: raw.data.note ?? "",
-      score,
-    };
-  });
-
-  const toStringArray = (arr: any): string[] =>
-    Array.isArray(arr) ? arr.map((x) => (typeof x === "string" ? x : String(x?.name ?? x ?? ""))).filter(Boolean) : [];
-
-  const modelRecommendation = recResults.map((raw, i) => {
-    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [] as string[], fullList: [] as string[], score: 0 };
-    const score = scoreRecommendation(raw.data);
-    return {
-      model: MODEL_NAMES[i],
-      rank: raw.data.brand_position ?? null,
-      listed: raw.data.brand_mentioned ?? false,
-      aboveYou: toStringArray(raw.data.tools_above_brand),
-      fullList: toStringArray(raw.data.tools_mentioned),
-      score,
-    };
-  });
-
-  const modelCompetitive = compResults.map((raw, i) => {
-    if (raw.error || !raw.data) return { model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0 };
-    const score = scoreCompetitive(raw.data);
-    return {
-      model: MODEL_NAMES[i],
-      sentiment: raw.data.sentiment ?? "neutral",
-      note: raw.data.sentiment_note ?? "",
-      wins: raw.data.wins ?? [],
-      losses: raw.data.losses ?? [],
-      score,
-    };
-  });
-
-  // ── Dimension scores with consistency bonus ──
-
-  const awarenessScores = modelAwareness.map((m) => m.score);
-  const positioningScores = modelPositioning.map((m) => m.score);
-  const recScores = modelRecommendation.map((m) => m.score);
-  const compScores = modelCompetitive.map((m) => m.score);
-
-  const validAvg = (arr: number[]) => {
-    const valid = arr.filter((n) => n > 0);
-    return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
-  };
-
-  const avgAwareness = Math.round(validAvg(awarenessScores) + computeConsistency(awarenessScores));
-  const avgPositioning = Math.round(validAvg(positioningScores) + computeConsistency(positioningScores));
-  const avgRecommendation = Math.round(validAvg(recScores) + computeConsistency(recScores));
-  const avgCompetitive = Math.round(validAvg(compScores) + computeConsistency(compScores));
-
-  const overallScore = clamp(Math.round((avgAwareness + avgPositioning + avgRecommendation + avgCompetitive) / 4));
-  const overallVerdict = getOverallVerdict(overallScore);
-
-  // ── Share of voice ──
-
-  const toolCounts: Record<string, number> = {};
-  for (const m of modelRecommendation) {
-    for (const tool of m.fullList) {
-      const normalized = tool.toLowerCase().trim();
-      toolCounts[normalized] = (toolCounts[normalized] || 0) + 1;
-    }
-  }
-  const totalMentions = Object.values(toolCounts).reduce((a, b) => a + b, 0) || 1;
-  const shareOfVoice = Object.entries(toolCounts)
-    .map(([name, count]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), pct: Math.round((count / totalMentions) * 100) }))
-    .sort((a, b) => b.pct - a.pct)
-    .slice(0, 5);
-
-  // ── Aggregate competitive data ──
-
-  const allWins = modelCompetitive.flatMap((m) => m.wins).filter(Boolean);
-  const allLosses = modelCompetitive.flatMap((m) => m.losses).filter(Boolean);
-  const topWins = [...new Set(allWins)].slice(0, 3);
-  const topLosses = [...new Set(allLosses)].slice(0, 3);
-
-  const quadrant = {
-    awarenessScore: avgAwareness,
-    recommendationScore: avgRecommendation,
-    ...getQuadrant(avgAwareness, avgRecommendation),
-  };
-
-  // ── Insights ──
-
-  const awarenessInsight = generateAwarenessInsight(modelAwareness, brand);
-  const recInsight = generateRecInsight(modelRecommendation, brand);
-  const compInsight = generateCompInsight(modelCompetitive, brand);
-
-  let positioningInsight = "";
-  try {
-    const model = getGenAI().getGenerativeModel({ model: "gemini-2.5-flash" });
-    const res = await withTimeout(
-      model.generateContent({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: `Based on how 4 LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
-          }],
-        }],
-      }),
-      TIMEOUT_MS
-    );
-    positioningInsight = res.response.text().trim();
-  } catch {
-    positioningInsight = `Mixed positioning signals across models for ${brand}.`;
-  }
-
-  // ── Result ──
-
-  const result = {
-    brand,
-    category,
-    auditDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-    overallScore,
-    overallVerdict,
-    overallSub: getVerdictSub(overallVerdict, brand),
-    quadrant,
-    awareness: {
-      score: avgAwareness,
-      label: getScoreLabel(avgAwareness, "awareness"),
-      color: getScoreColor(avgAwareness),
-      modelResults: modelAwareness.map((m) => ({
-        model: m.model,
-        known: m.known,
-        description: m.description,
-        scores: m.scores,
-      })),
-      consistencyBonus: computeConsistency(awarenessScores),
-      insight: awarenessInsight,
-    },
-    positioning: {
-      score: avgPositioning,
-      label: getScoreLabel(avgPositioning, "positioning"),
-      color: getScoreColor(avgPositioning),
-      modelResults: modelPositioning.map((m) => ({
-        model: m.model,
-        strength: m.strength,
-        targetCustomer: m.targetCustomer,
-        valueProp: m.valueProp,
-        differentiation: m.differentiation,
-        scores: m.scores,
-        note: m.note,
-      })),
-      consistencyBonus: computeConsistency(positioningScores),
-      insight: positioningInsight,
-    },
-    recommendation: {
-      score: avgRecommendation,
-      label: getScoreLabel(avgRecommendation, "recommendation"),
-      color: getScoreColor(avgRecommendation),
-      promptUsed: prompts.recommendation,
-      modelResults: modelRecommendation.map((m) => ({
-        model: m.model,
-        rank: m.rank,
-        listed: m.listed,
-        aboveYou: m.aboveYou,
-        fullList: m.fullList,
-      })),
-      shareOfVoice,
-      consistencyBonus: computeConsistency(recScores),
-      insight: recInsight,
-    },
-    competitive: {
-      score: avgCompetitive,
-      label: getScoreLabel(avgCompetitive, "competitive"),
-      color: getScoreColor(avgCompetitive),
-      competitor: findTopCompetitor(modelRecommendation, brand),
-      wins: topWins,
-      losses: topLosses,
-      sentimentPerModel: modelCompetitive.map((m) => ({
-        model: m.model,
-        sentiment: m.sentiment,
-        note: m.note,
-      })),
-      overallSentiment: getMajoritySentiment(modelCompetitive),
-      consistencyBonus: computeConsistency(compScores),
-      insight: compInsight,
-    },
-  };
-
-  await getSupabase()
-    .from("audits")
-    .update({
-      status: "complete",
-      overall_score: overallScore,
-      overall_verdict: overallVerdict,
-      result,
-    })
-    .eq("id", auditId);
-}
-
 // ── Helpers ──────────────────────────────────────────────────
 
 function average(nums: number[]): number {
   if (nums.length === 0) return 0;
   return nums.reduce((a, b) => a + b, 0) / nums.length;
+}
+
+const toStringArray = (arr: any): string[] =>
+  Array.isArray(arr) ? arr.map((x) => (typeof x === "string" ? x : String(x?.name ?? x ?? ""))).filter(Boolean) : [];
+
+function validAvg(arr: number[]): number {
+  const valid = arr.filter((n) => n > 0);
+  return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : 0;
 }
 
 function findTopCompetitor(modelRec: any[], brand: string): string {
@@ -787,4 +548,384 @@ function generateCompInsight(models: any[], brand: string): string {
   if (positive.length > 0) parts.push(`${positive.map((m) => m.model).join(" and ")} ${positive.length === 1 ? "favors" : "favor"} ${brand}.`);
   if (negative.length === 0 && positive.length === 0) parts.push(`Models have a neutral view of ${brand} vs competitors.`);
   return parts.join(" ");
+}
+
+// ── Main Handler ─────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  try {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      req.headers.get("x-real-ip") ??
+      "unknown";
+
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Max 3 audits per hour per IP." },
+        { status: 429 }
+      );
+    }
+
+    const body = await req.json();
+    const { brand, category: userCategory, websiteUrl } = body;
+
+    if (!brand || !websiteUrl) {
+      return NextResponse.json({ error: "Missing brand or website URL" }, { status: 400 });
+    }
+
+    const scraped = await scrapeWebsite(websiteUrl);
+    const category = userCategory?.trim() || (scraped ? await detectCategory(scraped, brand) : "SaaS");
+
+    const { data: row, error: insertErr } = await getSupabase()
+      .from("audits")
+      .insert({
+        brand,
+        category,
+        website_url: websiteUrl,
+        overall_score: 0,
+        overall_verdict: "pending",
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (insertErr || !row) {
+      console.error("Supabase insert error:", insertErr);
+      return NextResponse.json({ error: "Failed to create audit" }, { status: 500 });
+    }
+
+    const auditId = row.id;
+
+    after(async () => {
+      try {
+        await processAudit(auditId, brand, category, scraped);
+      } catch (err) {
+        console.error("Audit processing failed:", err);
+        await getSupabase().from("audits").update({ status: "error" }).eq("id", auditId);
+      }
+    });
+
+    return NextResponse.json({ id: auditId, category });
+  } catch (err) {
+    console.error("run-audit error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// ── Audit Processing (two phases) ────────────────────────────
+
+async function processAudit(
+  auditId: string,
+  brand: string,
+  category: string,
+  scraped: { title: string; description: string; content: string } | null
+) {
+  const supabase = getSupabase();
+  const categoryBase = category.replace(/\s+tools?\s*$/i, "").trim();
+  console.log(`[${auditId}] processAudit start — brand: ${brand}, category: ${category}`);
+
+  // ── Phase 1: Awareness + Positioning ────────────────────────
+  console.log(`[${auditId}] Phase 1 start`);
+  const [awarenessResults, posResults] = await Promise.all([
+    runAllModels(buildAwarenessPrompt(brand)),
+    runAllModels(buildPositioningPrompt(brand, categoryBase)),
+  ]);
+
+  const modelAwareness = awarenessResults.map((raw, i) => {
+    if (raw.error || !raw.data) return {
+      model: MODEL_NAMES[i], known: false, description: null,
+      scores: { recognition: 0, accuracy: 0, detail: 0, confidence: 0 }, score: 0,
+      citations: [] as string[],
+    };
+    const { score, subscores } = scoreAwareness(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      known: raw.data.brand_recognized ?? false,
+      description: raw.data.description ?? null,
+      scores: subscores,
+      score,
+      citations: raw.citations ?? [],
+    };
+  });
+
+  const modelPositioning = posResults.map((raw, i) => {
+    if (raw.error || !raw.data) return {
+      model: MODEL_NAMES[i], strength: "confused", targetCustomer: "",
+      valueProp: "", differentiation: "", scores: { targetClarity: 0, valuePropAccuracy: 0, differentiationClarity: 0 },
+      note: "Model unavailable", score: 0,
+    };
+    const awarenessKnown = modelAwareness[i]?.known ?? false;
+    const score = scorePositioning(raw.data, awarenessKnown);
+    return {
+      model: MODEL_NAMES[i],
+      strength: raw.data.positioning_strength ?? "confused",
+      targetCustomer: raw.data.target_customer ?? "",
+      valueProp: raw.data.value_proposition ?? "",
+      differentiation: raw.data.differentiation ?? "",
+      scores: {
+        targetClarity: clamp(safeNum(raw.data.target_clarity)),
+        valuePropAccuracy: clamp(safeNum(raw.data.value_prop_accuracy)),
+        differentiationClarity: clamp(safeNum(raw.data.differentiation_clarity)),
+      },
+      note: raw.data.note ?? "",
+      score,
+    };
+  });
+
+  const awarenessScores = modelAwareness.map((m) => m.score);
+  const positioningScores = modelPositioning.map((m) => m.score);
+
+  const avgAwareness = Math.round(validAvg(awarenessScores) + computeConsistency(awarenessScores));
+  const avgPositioning = Math.round(validAvg(positioningScores) + computeConsistency(positioningScores));
+
+  const awarenessInsight = generateAwarenessInsight(modelAwareness, brand);
+
+  let positioningInsight = "";
+  try {
+    const model = getGenAI().getGenerativeModel({ model: "gemini-2.5-flash" });
+    const res = await withTimeout(
+      model.generateContent({
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `Based on how ${MODEL_NAMES.length} LLMs describe ${brand}'s positioning in the ${category} space, write one sharp sentence identifying the biggest positioning gap or inconsistency. Be direct. No fluff.\n\nModel results: ${JSON.stringify(modelPositioning.map((m) => ({ model: m.model, strength: m.strength, target: m.targetCustomer, valueProp: m.valueProp, diff: m.differentiation })))}`,
+          }],
+        }],
+      }),
+      TIMEOUT_MS
+    );
+    positioningInsight = res.response.text().trim();
+  } catch {
+    positioningInsight = `Mixed positioning signals across models for ${brand}.`;
+  }
+
+  // Partial result — write to DB so the UI can start rendering
+  const partialResult = {
+    brand,
+    category,
+    auditDate: new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
+    awareness: {
+      score: avgAwareness,
+      label: getScoreLabel(avgAwareness, "awareness"),
+      color: getScoreColor(avgAwareness),
+      modelResults: modelAwareness.map((m) => ({
+        model: m.model,
+        known: m.known,
+        description: m.description,
+        scores: m.scores,
+        citations: m.citations,
+      })),
+      consistencyBonus: computeConsistency(awarenessScores),
+      insight: awarenessInsight,
+    },
+    positioning: {
+      score: avgPositioning,
+      label: getScoreLabel(avgPositioning, "positioning"),
+      color: getScoreColor(avgPositioning),
+      modelResults: modelPositioning.map((m) => ({
+        model: m.model,
+        strength: m.strength,
+        targetCustomer: m.targetCustomer,
+        valueProp: m.valueProp,
+        differentiation: m.differentiation,
+        scores: m.scores,
+        note: m.note,
+      })),
+      consistencyBonus: computeConsistency(positioningScores),
+      insight: positioningInsight,
+    },
+  };
+
+  console.log(`[${auditId}] Phase 1 complete — awareness: ${avgAwareness}, positioning: ${avgPositioning}`);
+  await supabase
+    .from("audits")
+    .update({ result: partialResult })
+    .eq("id", auditId);
+
+  // ── Phase 2: Recommendation + Competitive ────────────────────
+  console.log(`[${auditId}] Phase 2 start`);
+  const [recResults, compResults] = await Promise.all([
+    runAllModels(buildRecommendationPrompt(brand, categoryBase)),
+    runAllModels(buildCompetitivePrompt(brand, categoryBase)),
+  ]);
+
+  const modelRecommendation = recResults.map((raw, i) => {
+    if (raw.error || !raw.data) return {
+      model: MODEL_NAMES[i], rank: null, listed: false, aboveYou: [] as string[], fullList: [] as string[], score: 0,
+    };
+    const score = scoreRecommendation(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      rank: raw.data.brand_position ?? null,
+      listed: raw.data.brand_mentioned ?? false,
+      aboveYou: toStringArray(raw.data.tools_above_brand),
+      fullList: toStringArray(raw.data.tools_mentioned),
+      score,
+    };
+  });
+
+  const modelCompetitive = compResults.map((raw, i) => {
+    if (raw.error || !raw.data) return {
+      model: MODEL_NAMES[i], sentiment: "unknown", note: "Model unavailable", wins: [], losses: [], score: 0,
+    };
+    const score = scoreCompetitive(raw.data);
+    return {
+      model: MODEL_NAMES[i],
+      sentiment: raw.data.sentiment ?? "neutral",
+      note: raw.data.sentiment_note ?? "",
+      wins: raw.data.wins ?? [],
+      losses: raw.data.losses ?? [],
+      score,
+    };
+  });
+
+  const recScores = modelRecommendation.map((m) => m.score);
+  const compScores = modelCompetitive.map((m) => m.score);
+
+  const avgRecommendation = Math.round(validAvg(recScores) + computeConsistency(recScores));
+  const avgCompetitive = Math.round(validAvg(compScores) + computeConsistency(compScores));
+
+  // Weighted scoring: Recommendation 35%, Awareness 30%, Positioning 20%, Competitive 15%
+  const overallScore = clamp(Math.round(
+    avgRecommendation * 0.35 +
+    avgAwareness * 0.30 +
+    avgPositioning * 0.20 +
+    avgCompetitive * 0.15
+  ));
+  const overallVerdict = getOverallVerdict(overallScore);
+
+  // Share of voice
+  const toolCounts: Record<string, number> = {};
+  for (const m of modelRecommendation) {
+    for (const tool of m.fullList) {
+      const normalized = tool.toLowerCase().trim();
+      toolCounts[normalized] = (toolCounts[normalized] || 0) + 1;
+    }
+  }
+  const totalMentions = Object.values(toolCounts).reduce((a, b) => a + b, 0) || 1;
+  const shareOfVoice = Object.entries(toolCounts)
+    .map(([name, count]) => ({ name: name.charAt(0).toUpperCase() + name.slice(1), pct: Math.round((count / totalMentions) * 100) }))
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 5);
+
+  const allWins = modelCompetitive.flatMap((m) => m.wins).filter(Boolean);
+  const allLosses = modelCompetitive.flatMap((m) => m.losses).filter(Boolean);
+  const topWins = [...new Set(allWins)].slice(0, 3);
+  const topLosses = [...new Set(allLosses)].slice(0, 3);
+
+  const quadrant = {
+    awarenessScore: avgAwareness,
+    recommendationScore: avgRecommendation,
+    ...getQuadrant(avgAwareness, avgRecommendation),
+  };
+
+  console.log(`[${auditId}] Phase 2 complete — recommendation: ${avgRecommendation}, competitive: ${avgCompetitive}, overall: ${overallScore}`);
+  const recInsight = generateRecInsight(modelRecommendation, brand);
+  const compInsight = generateCompInsight(modelCompetitive, brand);
+
+  // ── Phase 3: Competitor Benchmarking (premium) ───────────────
+  // Aggregate competitors mentioned above the brand, pick top 2 unique names
+  const brandLower = brand.toLowerCase();
+  const competitorCounts: Record<string, number> = {};
+  for (const m of modelRecommendation) {
+    for (const c of m.aboveYou) {
+      const norm = c.toLowerCase().trim();
+      if (norm && norm !== brandLower) {
+        const display = c.trim();
+        competitorCounts[display] = (competitorCounts[display] || 0) + 1;
+      }
+    }
+  }
+  const topCompetitorNames = Object.entries(competitorCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([name]) => name);
+
+  let competitorBenchmarks: CompetitorBenchmark[] = [];
+  if (topCompetitorNames.length > 0) {
+    console.log(`[${auditId}] Phase 3: benchmarking ${topCompetitorNames.join(", ")}`);
+    try {
+      const benchmarkResults = await Promise.race([
+        Promise.all(
+          topCompetitorNames.map(async (compName) => {
+            const [awaRes, recRes] = await Promise.all([
+              runAllModels(buildAwarenessPrompt(compName)),
+              runAllModels(buildRecommendationPrompt(compName, categoryBase)),
+            ]);
+            const awaScores = awaRes.map((r) => r.error || !r.data ? 0 : scoreAwareness(r.data).score);
+            const recScoresComp = recRes.map((r) => r.error || !r.data ? 0 : scoreRecommendation(r.data));
+            const awaScore = Math.round(validAvg(awaScores) + computeConsistency(awaScores));
+            const recScore = Math.round(validAvg(recScoresComp) + computeConsistency(recScoresComp));
+            return { name: compName, awarenessScore: awaScore, recommendationScore: recScore };
+          })
+        ),
+        new Promise<CompetitorBenchmark[]>((resolve) =>
+          setTimeout(() => {
+            console.warn(`[${auditId}] Competitor benchmarking timed out after 45s, skipping`);
+            resolve([]);
+          }, 45_000)
+        ),
+      ]);
+      competitorBenchmarks = benchmarkResults;
+    } catch (e) {
+      console.error(`[${auditId}] Competitor benchmarking failed:`, (e as Error)?.message);
+    }
+  }
+
+  // ── Assemble final result ─────────────────────────────────────
+  const result: AuditResult = {
+    brand,
+    category,
+    auditDate: partialResult.auditDate,
+    overallScore,
+    overallVerdict,
+    overallSub: getVerdictSub(overallVerdict, brand),
+    quadrant,
+    awareness: partialResult.awareness,
+    positioning: partialResult.positioning,
+    recommendation: {
+      score: avgRecommendation,
+      label: getScoreLabel(avgRecommendation, "recommendation"),
+      color: getScoreColor(avgRecommendation),
+      promptUsed: buildRecommendationPrompt(brand, categoryBase),
+      modelResults: modelRecommendation.map((m) => ({
+        model: m.model,
+        rank: m.rank,
+        listed: m.listed,
+        aboveYou: m.aboveYou,
+        fullList: m.fullList,
+      })),
+      shareOfVoice,
+      consistencyBonus: computeConsistency(recScores),
+      insight: recInsight,
+    },
+    competitive: {
+      score: avgCompetitive,
+      label: getScoreLabel(avgCompetitive, "competitive"),
+      color: getScoreColor(avgCompetitive),
+      competitor: findTopCompetitor(modelRecommendation, brand),
+      wins: topWins,
+      losses: topLosses,
+      sentimentPerModel: modelCompetitive.map((m) => ({
+        model: m.model,
+        sentiment: m.sentiment,
+        note: m.note,
+      })),
+      overallSentiment: getMajoritySentiment(modelCompetitive),
+      consistencyBonus: computeConsistency(compScores),
+      insight: compInsight,
+    },
+    competitorBenchmarks,
+  };
+
+  await supabase
+    .from("audits")
+    .update({
+      status: "complete",
+      overall_score: overallScore,
+      overall_verdict: overallVerdict,
+      result,
+    })
+    .eq("id", auditId);
+  console.log(`[${auditId}] processAudit done ✓`);
 }

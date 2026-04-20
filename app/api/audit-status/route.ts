@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await getSupabase()
     .from("audits")
-    .select("id, status, brand, category, website_url, result, overall_score, overall_verdict, unlocked, unlocked_at")
+    .select("id, status, brand, category, website_url, result, overall_score, overall_verdict, unlocked, unlocked_at, created_at")
     .eq("id", id)
     .single();
 
@@ -18,5 +18,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Audit not found" }, { status: 404 });
   }
 
-  return NextResponse.json(data);
+  // Fetch score history: last 5 completed audits for the same brand (excluding current)
+  const { data: history } = await getSupabase()
+    .from("audits")
+    .select("id, overall_score, created_at")
+    .eq("brand", data.brand)
+    .eq("status", "complete")
+    .neq("id", id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  return NextResponse.json({ ...data, scoreHistory: history ?? [] });
 }
