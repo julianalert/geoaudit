@@ -135,23 +135,23 @@ async function detectCategory(
         contents: [{
           role: "user",
           parts: [{
-            text: `Based on this website, determine the product category for "${brand}". Return JSON: {"category": "category in 2-4 words, e.g. project management, CRM, design tool, analytics"}\n\nTitle: ${scraped.title}\nDescription: ${scraped.description}\nContent: ${scraped.content.slice(0, 800)}`,
+            text: `Based on this website, determine the business or product category for "${brand}". Return JSON: {"category": "category in 2-4 words, e.g. project management, coffee shop, accounting firm, e-commerce, fitness app, law firm"}\n\nTitle: ${scraped.title}\nDescription: ${scraped.description}\nContent: ${scraped.content.slice(0, 800)}`,
           }],
         }],
       }),
       15_000
     );
     const json = safeParseJSON(res.response.text());
-    return json?.category || "SaaS";
+    return json?.category || "business";
   } catch {
-    return "SaaS";
+    return "business";
   }
 }
 
 // ── Model Callers (JSON mode) ────────────────────────────────
 
 const SYSTEM_PROMPT =
-  "You are a knowledgeable technology advisor. Answer directly and honestly based on what you actually know. If you don't know something, say so. Always respond with valid JSON only, no markdown fences, no extra text.";
+  "You are a knowledgeable business analyst with broad expertise across industries — technology, retail, finance, healthcare, hospitality, professional services, and more. Answer directly and honestly based on what you actually know. If you don't know something, say so. Always respond with valid JSON only, no markdown fences, no extra text.";
 
 type ModelCallerResult = { parsed: any; citations?: string[] };
 type ModelCaller = (prompt: string) => Promise<ModelCallerResult>;
