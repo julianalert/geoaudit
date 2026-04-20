@@ -1,7 +1,7 @@
 export const metadata = {
-  title: "GEO Audit 101 — LLM Visibility Audit Tool",
+  title: "Free GEO Audit Tool — LLM Visibility",
   description:
-    "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask.",
+    "Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask. Free tool.",
 };
 
 export default function RootLayout({

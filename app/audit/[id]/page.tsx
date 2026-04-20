@@ -592,7 +592,7 @@ function AuditResultsView({
       {/* ── 06 — Online Presence ── */}
       {!isPartial && (
         <div className="fade" style={{ marginBottom: 28 }}>
-          <SectionHeading label="06 — WHERE AI LEARNS ABOUT YOU" badge={unlocked ? (onlinePresenceData ? "Analyzed" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
+          <SectionHeading label="05 — WHERE AI LEARNS ABOUT YOU" badge={unlocked ? (onlinePresenceData ? "Analyzed" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
           <Card>
             <CardDescription>Which platforms and sources feed LLMs information about your brand?</CardDescription>
             {unlocked ? (
@@ -639,7 +639,7 @@ function AuditResultsView({
       {/* ── 07 — 30-Day Roadmap ── */}
       {!isPartial && (
         <div className="fade" style={{ marginBottom: 28 }}>
-          <SectionHeading label="07 — 30-DAY FIX ROADMAP" badge={unlocked ? (d.roadmap ? "Ready" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
+          <SectionHeading label="06 — 30-DAY FIX ROADMAP" badge={unlocked ? (d.roadmap ? "Ready" : "Generating") : "Locked"} badgeColor={unlocked ? "#3b82f6" : "#fbbf24"} />
           <Card>
             <CardDescription>A prioritized, week-by-week action plan built from your audit results.</CardDescription>
             {unlocked ? (
