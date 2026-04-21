@@ -153,7 +153,7 @@ async function detectCategory(
 const SYSTEM_PROMPT =
   "You are a knowledgeable business analyst with broad expertise across industries — technology, retail, finance, healthcare, hospitality, professional services, and more. Answer directly and honestly based on what you actually know. If you don't know something, say so. Always respond with valid JSON only, no markdown fences, no extra text.";
 
-type ModelCallerResult = { parsed: any; citations?: string[] };
+type ModelCallerResult = { parsed: any; citations?: string[]; inputTokens: number; outputTokens: number };
 type ModelCaller = (prompt: string) => Promise<ModelCallerResult>;
 
 async function callOpenAIJSON(prompt: string): Promise<ModelCallerResult> {
@@ -169,7 +169,11 @@ async function callOpenAIJSON(prompt: string): Promise<ModelCallerResult> {
     }),
     TIMEOUT_MS
   );
-  return { parsed: JSON.parse(res.choices[0]?.message?.content ?? "{}") };
+  return {
+    parsed: JSON.parse(res.choices[0]?.message?.content ?? "{}"),
+    inputTokens: res.usage?.prompt_tokens ?? 0,
+    outputTokens: res.usage?.completion_tokens ?? 0,
+  };
 }
 
 async function callPerplexityJSON(prompt: string): Promise<ModelCallerResult> {
@@ -198,7 +202,12 @@ async function callPerplexityJSON(prompt: string): Promise<ModelCallerResult> {
   const parsed = safeParseJSON(text);
   if (!parsed) throw new Error("Perplexity JSON parse failed");
   const citations: string[] = Array.isArray(res.citations) ? res.citations : [];
-  return { parsed, citations };
+  return {
+    parsed,
+    citations,
+    inputTokens: res.usage?.prompt_tokens ?? 0,
+    outputTokens: res.usage?.completion_tokens ?? 0,
+  };
 }
 
 async function callClaudeJSON(prompt: string): Promise<ModelCallerResult> {
@@ -216,7 +225,11 @@ async function callClaudeJSON(prompt: string): Promise<ModelCallerResult> {
   const text = res.content[0]?.type === "text" ? res.content[0].text : "{}";
   const parsed = safeParseJSON(text);
   if (!parsed) throw new Error("Claude JSON parse failed");
-  return { parsed };
+  return {
+    parsed,
+    inputTokens: res.usage.input_tokens,
+    outputTokens: res.usage.output_tokens,
+  };
 }
 
 async function callGeminiJSON(prompt: string): Promise<ModelCallerResult> {
@@ -230,11 +243,36 @@ async function callGeminiJSON(prompt: string): Promise<ModelCallerResult> {
     }),
     TIMEOUT_MS
   );
-  return { parsed: JSON.parse(res.response.text()) };
+  return {
+    parsed: JSON.parse(res.response.text()),
+    inputTokens: res.response.usageMetadata?.promptTokenCount ?? 0,
+    outputTokens: res.response.usageMetadata?.candidatesTokenCount ?? 0,
+  };
 }
 
 const MODEL_NAMES = ["GPT-4o", "Claude", "Gemini"] as const;
 const MODEL_CALLERS: ModelCaller[] = [callOpenAIJSON, callClaudeJSON, callGeminiJSON];
+
+// ── Cost Tracking ────────────────────────────────────────────
+
+export type TokenUsage = Record<string, { input: number; output: number }>;
+
+const PRICE_PER_M: Record<string, { input: number; output: number }> = {
+  "GPT-4o":     { input: 2.50,  output: 10.00 },
+  "Claude":     { input: 3.00,  output: 15.00 },
+  "Gemini":     { input: 0.075, output: 0.30  },
+  "Perplexity": { input: 3.00,  output: 15.00 },
+};
+
+function computeTotalCost(usage: TokenUsage): number {
+  let total = 0;
+  for (const [model, counts] of Object.entries(usage)) {
+    const price = PRICE_PER_M[model];
+    if (!price) continue;
+    total += (counts.input / 1_000_000) * price.input + (counts.output / 1_000_000) * price.output;
+  }
+  return Math.round(total * 1_000_000) / 1_000_000;
+}
 
 // ── Retry wrapper ────────────────────────────────────────────
 
@@ -242,26 +280,26 @@ async function runWithRetry(
   caller: ModelCaller,
   modelName: string,
   prompt: string
-): Promise<{ data: any; citations?: string[]; error?: boolean }> {
+): Promise<{ data: any; citations?: string[]; error?: boolean; inputTokens: number; outputTokens: number }> {
   try {
-    const { parsed, citations } = await caller(prompt);
-    return { data: parsed, citations };
+    const { parsed, citations, inputTokens, outputTokens } = await caller(prompt);
+    return { data: parsed, citations, inputTokens, outputTokens };
   } catch (firstErr) {
     console.warn(`[${modelName}] call failed, retrying in 2s:`, (firstErr as Error)?.message);
     await new Promise((resolve) => setTimeout(resolve, 2000));
     try {
-      const { parsed, citations } = await caller(prompt);
-      return { data: parsed, citations };
+      const { parsed, citations, inputTokens, outputTokens } = await caller(prompt);
+      return { data: parsed, citations, inputTokens, outputTokens };
     } catch (e) {
       console.error(`[${modelName}] call failed after retry:`, (e as Error)?.message);
-      return { data: null, error: true };
+      return { data: null, error: true, inputTokens: 0, outputTokens: 0 };
     }
   }
 }
 
 async function runAllModels(
   prompt: string
-): Promise<Array<{ data: any; citations?: string[]; error?: boolean }>> {
+): Promise<Array<{ data: any; citations?: string[]; error?: boolean; inputTokens: number; outputTokens: number }>> {
   return Promise.all(
     MODEL_CALLERS.map((caller, i) => runWithRetry(caller, MODEL_NAMES[i], prompt))
   );
@@ -624,12 +662,23 @@ async function processAudit(
   const categoryBase = category.replace(/\s+tools?\s*$/i, "").trim();
   console.log(`[${auditId}] processAudit start — brand: ${brand}, category: ${category}`);
 
+  const usage: TokenUsage = {};
+  const addUsage = (model: string, input: number, output: number) => {
+    if (!usage[model]) usage[model] = { input: 0, output: 0 };
+    usage[model].input  += input;
+    usage[model].output += output;
+  };
+
   // ── Phase 1: Awareness + Positioning ────────────────────────
   console.log(`[${auditId}] Phase 1 start`);
   const [awarenessResults, posResults] = await Promise.all([
     runAllModels(buildAwarenessPrompt(brand)),
     runAllModels(buildPositioningPrompt(brand, categoryBase)),
   ]);
+  for (let i = 0; i < MODEL_NAMES.length; i++) {
+    addUsage(MODEL_NAMES[i], awarenessResults[i].inputTokens, awarenessResults[i].outputTokens);
+    addUsage(MODEL_NAMES[i], posResults[i].inputTokens, posResults[i].outputTokens);
+  }
 
   const modelAwareness = awarenessResults.map((raw, i) => {
     if (raw.error || !raw.data) return {
@@ -748,6 +797,10 @@ async function processAudit(
     runAllModels(buildRecommendationPrompt(brand, categoryBase)),
     runAllModels(buildCompetitivePrompt(brand, categoryBase)),
   ]);
+  for (let i = 0; i < MODEL_NAMES.length; i++) {
+    addUsage(MODEL_NAMES[i], recResults[i].inputTokens, recResults[i].outputTokens);
+    addUsage(MODEL_NAMES[i], compResults[i].inputTokens, compResults[i].outputTokens);
+  }
 
   const modelRecommendation = recResults.map((raw, i) => {
     if (raw.error || !raw.data) return {
@@ -852,6 +905,10 @@ async function processAudit(
               runAllModels(buildAwarenessPrompt(compName)),
               runAllModels(buildRecommendationPrompt(compName, categoryBase)),
             ]);
+            for (let i = 0; i < MODEL_NAMES.length; i++) {
+              addUsage(MODEL_NAMES[i], awaRes[i].inputTokens, awaRes[i].outputTokens);
+              addUsage(MODEL_NAMES[i], recRes[i].inputTokens, recRes[i].outputTokens);
+            }
             const awaScores = awaRes.map((r) => r.error || !r.data ? 0 : scoreAwareness(r.data).score);
             const recScoresComp = recRes.map((r) => r.error || !r.data ? 0 : scoreRecommendation(r.data));
             const awaScore = Math.round(validAvg(awaScores) + computeConsistency(awaScores));
@@ -925,7 +982,9 @@ async function processAudit(
       overall_score: overallScore,
       overall_verdict: overallVerdict,
       result,
+      cost_usd: computeTotalCost(usage),
+      token_usage: usage,
     })
     .eq("id", auditId);
-  console.log(`[${auditId}] processAudit done ✓`);
+  console.log(`[${auditId}] processAudit done ✓ — cost: $${computeTotalCost(usage).toFixed(6)}`);
 }

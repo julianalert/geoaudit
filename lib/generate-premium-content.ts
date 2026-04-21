@@ -1,5 +1,21 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getSupabase } from "@/lib/supabase";
+import type { TokenUsage } from "@/app/api/run-audit/route";
+
+const PREMIUM_PRICE_PER_M: Record<string, { input: number; output: number }> = {
+  Perplexity: { input: 3.00, output: 15.00 },
+  Claude:     { input: 3.00, output: 15.00 },
+};
+
+function computePremiumCost(usage: TokenUsage): number {
+  let total = 0;
+  for (const [model, counts] of Object.entries(usage)) {
+    const price = PREMIUM_PRICE_PER_M[model];
+    if (!price) continue;
+    total += (counts.input / 1_000_000) * price.input + (counts.output / 1_000_000) * price.output;
+  }
+  return Math.round(total * 1_000_000) / 1_000_000;
+}
 
 let _anthropic: Anthropic | null = null;
 function getAnthropic() {
@@ -97,7 +113,11 @@ Return exactly 6 sources ranked by importance for AI/LLM training data in the ${
   const text = res.choices?.[0]?.message?.content ?? "{}";
   const parsed = safeParseJSON(text);
   if (!parsed) throw new Error("Failed to parse online presence JSON");
-  return parsed;
+  return {
+    data: parsed,
+    inputTokens: res.usage?.prompt_tokens ?? 0,
+    outputTokens: res.usage?.completion_tokens ?? 0,
+  };
 }
 
 async function generateRoadmap(brand: string, category: string, auditSummary: string) {
@@ -136,7 +156,11 @@ Return exactly 4 weeks (WEEK 1 through WEEK 4), 2 actions per week. Sequence fro
     30_000
   );
   const text = res.content[0]?.type === "text" ? res.content[0].text : "{}";
-  return JSON.parse(text.replace(/```json\s*/g, "").replace(/```/g, "").trim());
+  return {
+    data: JSON.parse(text.replace(/```json\s*/g, "").replace(/```/g, "").trim()),
+    inputTokens: res.usage.input_tokens,
+    outputTokens: res.usage.output_tokens,
+  };
 }
 
 export async function generatePremiumContent(
@@ -155,8 +179,8 @@ export async function generatePremiumContent(
     generateRoadmap(brand, category, auditSummary),
   ]);
 
-  const opValue = onlinePresence.status === "fulfilled" ? onlinePresence.value : null;
-  const rmValue = roadmap.status === "fulfilled" ? roadmap.value : null;
+  const opResult = onlinePresence.status === "fulfilled" ? onlinePresence.value : null;
+  const rmResult = roadmap.status === "fulfilled" ? roadmap.value : null;
 
   if (onlinePresence.status === "rejected") {
     console.error(`[premium-content] Online presence failed for ${auditId}:`, onlinePresence.reason);
@@ -165,16 +189,44 @@ export async function generatePremiumContent(
     console.error(`[premium-content] Roadmap failed for ${auditId}:`, roadmap.reason);
   }
 
+  const opValue = opResult?.data ?? null;
+  const rmValue = rmResult?.data ?? null;
   const updatedResult = { ...result, onlinePresence: opValue, roadmap: rmValue };
+
+  // Compute premium LLM cost and merge with existing audit cost
+  const premiumUsage: TokenUsage = {};
+  if (opResult) {
+    premiumUsage["Perplexity"] = { input: opResult.inputTokens, output: opResult.outputTokens };
+  }
+  if (rmResult) {
+    premiumUsage["Claude"] = { input: rmResult.inputTokens, output: rmResult.outputTokens };
+  }
+  const premiumCost = computePremiumCost(premiumUsage);
+
+  const { data: existing } = await getSupabase()
+    .from("audits")
+    .select("cost_usd, token_usage")
+    .eq("id", auditId)
+    .single();
+
+  const existingCost = Number(existing?.cost_usd ?? 0);
+  const existingUsage: TokenUsage = (existing?.token_usage as TokenUsage) ?? {};
+  const mergedUsage: TokenUsage = { ...existingUsage };
+  for (const [model, counts] of Object.entries(premiumUsage)) {
+    mergedUsage[model] = {
+      input:  (mergedUsage[model]?.input  ?? 0) + counts.input,
+      output: (mergedUsage[model]?.output ?? 0) + counts.output,
+    };
+  }
 
   const { error } = await getSupabase()
     .from("audits")
-    .update({ result: updatedResult })
+    .update({ result: updatedResult, cost_usd: existingCost + premiumCost, token_usage: mergedUsage })
     .eq("id", auditId);
 
   if (error) {
     console.error(`[premium-content] DB update failed for ${auditId}:`, error);
   } else {
-    console.log(`[premium-content] Done for audit ${auditId} — op:${opValue ? "ok" : "fail"} rm:${rmValue ? "ok" : "fail"}`);
+    console.log(`[premium-content] Done for audit ${auditId} — op:${opValue ? "ok" : "fail"} rm:${rmValue ? "ok" : "fail"} premium_cost:$${premiumCost.toFixed(6)}`);
   }
 }
