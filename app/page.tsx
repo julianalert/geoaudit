@@ -95,11 +95,12 @@ export default function Home() {
         </div>
 
         <h2 className="fade" style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(32px, 5vw, 54px)", fontWeight: 800, letterSpacing: "-1.5px", color: "#0f172a", lineHeight: 1.05, marginBottom: 18 }}>
-          When buyers ask ChatGPT,<br />does it <span style={{ color: "#3b82f6" }}>recommend you</span>?
+          IS YOUR BRAND <span style={{ color: "#3b82f6" }}>SHOWING UP</span><br />IN AI ANSWERS?
         </h2>
 
         <p className="fade" style={{ fontSize: 16, color: "#475569", lineHeight: 1.6, maxWidth: 700, marginBottom: 34 }}>
-          Test your brand across GPT-4o, Claude, and Gemini in 45 seconds. See how AI ranks you against competitors, catch what it gets wrong about you, and see exactly what to change next.
+          Find out if AI models know your brand, describe you accurately, and recommend you when buyers ask.
+          Get a tailored action plan to improve your visibility across AI search.
         </p>
 
         {/* ── Form ── */}
@@ -151,6 +152,12 @@ export default function Home() {
               <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: "#64748b", letterSpacing: "0.05em" }}>{t}</span>
             </div>
           ))}
+        </div>
+
+        {/* ── Scan placeholder ── */}
+        <div className="fade" style={{ marginTop: 56, border: "1px dashed #e2e8f0", borderRadius: 10, padding: "56px 32px", textAlign: "center" }}>
+          <div style={{ fontSize: 40, marginBottom: 14, opacity: 0.15 }}>◈</div>
+          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, letterSpacing: "0.2em", color: "#94a3b8" }}>ENTER A BRAND TO BEGIN SCAN</div>
         </div>
 
         {/* ── What you get (sample preview) ── */}
