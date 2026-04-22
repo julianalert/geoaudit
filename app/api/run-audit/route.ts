@@ -4,6 +4,8 @@ import type { AuditResult, CompetitorBenchmark } from "@/lib/types";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 export const maxDuration = 300;
 
@@ -59,13 +61,37 @@ function safeParseJSON(text: string): any {
 }
 
 // ── Rate Limiting ─────────────────────────────────────────────
-// Simple in-memory per-instance limiter: 3 audits / hour / IP.
+// Distributed limiter via Upstash Redis when env vars are present;
+// falls back to an in-memory map (per cold-start instance) otherwise.
+// Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN to enable the
+// distributed path (required for multi-instance Vercel deployments).
 
-const _rateLimitMap = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_SECONDS = 60 * 60; // 1 hour
 
-function checkRateLimit(ip: string): boolean {
+let _upstashLimiter: Ratelimit | null = null;
+function getUpstashLimiter(): Ratelimit | null {
+  if (_upstashLimiter) return _upstashLimiter;
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return null;
+  _upstashLimiter = new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(RATE_LIMIT_MAX, `${RATE_LIMIT_WINDOW_SECONDS} s`),
+    prefix: "geo-audit:rl",
+  });
+  return _upstashLimiter;
+}
+
+// Fallback: in-memory sliding window (single instance only).
+const _rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT_WINDOW_MS = RATE_LIMIT_WINDOW_SECONDS * 1000;
+
+async function checkRateLimit(ip: string): Promise<boolean> {
+  const upstash = getUpstashLimiter();
+  if (upstash) {
+    const { success } = await upstash.limit(ip);
+    return success;
+  }
+  // In-memory fallback
   const now = Date.now();
   const timestamps = (_rateLimitMap.get(ip) ?? []).filter(
     (t) => t > now - RATE_LIMIT_WINDOW_MS
@@ -78,16 +104,66 @@ function checkRateLimit(ip: string): boolean {
 
 // ── Website Scraping ─────────────────────────────────────────
 
+// Returns true for IP addresses and hostnames that map to private/internal
+// networks so we can block SSRF attempts before making the outbound request.
+function isPrivateHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+
+  // Explicit loopback / wildcard
+  if (h === "localhost" || h === "0.0.0.0" || h === "::1") return true;
+
+  // Cloud metadata endpoints (GCP, AWS link-local, etc.)
+  if (h === "metadata.internal" || h === "metadata.google.internal") return true;
+
+  // IPv4: only block if the hostname is a raw IP address.
+  // Hostname-based DNS bypass is a separate (harder) problem; this covers
+  // the most common SSRF payloads that use IP literals.
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 0)   return true;  // 0.0.0.0/8
+    if (a === 10)  return true;  // 10.0.0.0/8  private
+    if (a === 127) return true;  // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true;     // 169.254.0.0/16 link-local (AWS metadata)
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12 private
+    if (a === 192 && b === 0  && Number(ipv4[3]) === 2) return true; // 192.0.2.0/24 TEST-NET
+    if (a === 192 && b === 168) return true;     // 192.168.0.0/16 private
+    if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15
+    if (a === 100 && b >= 64 && b <= 127) return true;   // 100.64.0.0/10 CGNAT
+    if (a >= 224)  return true;  // 224+ multicast / reserved / broadcast
+  }
+
+  // IPv6 link-local and ULA
+  if (h.startsWith("fe80:")) return true;  // link-local
+  if (h.startsWith("fc") || h.startsWith("fd")) return true; // ULA
+
+  return false;
+}
+
 async function scrapeWebsite(url: string): Promise<{ title: string; description: string; content: string } | null> {
   try {
     let normalizedUrl = url;
     if (!normalizedUrl.startsWith("http://") && !normalizedUrl.startsWith("https://")) {
       normalizedUrl = "https://" + normalizedUrl;
     }
+
+    // SSRF guard: validate scheme and block private/internal destinations.
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(normalizedUrl);
+    } catch {
+      return null;
+    }
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") return null;
+    if (isPrivateHostname(parsedUrl.hostname)) return null;
+
     const res = await withTimeout(
       fetch(normalizedUrl, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; GEOAudit/1.0)" },
-        redirect: "follow",
+        // Disable automatic redirect-following to prevent SSRF via open redirects
+        // to internal hosts. The scraped page is informational only; losing a
+        // redirect is acceptable.
+        redirect: "error",
       }),
       10_000
     );
@@ -142,23 +218,33 @@ async function detectBrandMeta(
       model: "gemini-2.5-flash",
       generationConfig: { responseMimeType: "application/json" } as any,
     });
+    // Sanitize user-supplied brand name and scraped content before injecting
+    // into the prompt. Truncate to prevent runaway inputs and wrap untrusted
+    // website content in XML delimiters so the model treats it as data.
+    const safeBrand = brand.slice(0, 200);
+    const safeTitle = scraped.title.slice(0, 200);
+    const safeDesc  = scraped.description.slice(0, 500);
+    const safeContent = scraped.content.slice(0, 1200);
+
     const res = await withTimeout(
       model.generateContent({
         contents: [{
           role: "user",
           parts: [{
-            text: `Analyze this website for the brand "${brand}" and extract three pieces of metadata.
+            text: `Analyze this website for the brand "${safeBrand}" and extract three pieces of metadata.
 
 Return JSON only:
 {
   "category": "2-4 words describing the business / product category, e.g. 'project management', 'CRM for startups', 'coffee shop', 'law firm'",
   "topCompetitor": "single most well-known competitor brand name a typical buyer would compare against, or null if no clear competitor can be inferred. Must be a real, named competitor - not a generic phrase.",
-  "icpPhrase": "one short noun phrase describing the ideal customer, e.g. 'small dev teams shipping B2B SaaS', 'solo freelancers', 'enterprise legal departments'. MUST NOT contain the name '${brand}' or any brand name - describe only the customer type."
+  "icpPhrase": "one short noun phrase describing the ideal customer, e.g. 'small dev teams shipping B2B SaaS', 'solo freelancers', 'enterprise legal departments'. MUST NOT contain the name '${safeBrand}' or any brand name - describe only the customer type."
 }
 
-Title: ${scraped.title}
-Description: ${scraped.description}
-Content: ${scraped.content.slice(0, 1200)}`,
+<website_data>
+Title: ${safeTitle}
+Description: ${safeDesc}
+Content: ${safeContent}
+</website_data>`,
           }],
         }],
       }),
@@ -525,12 +611,15 @@ async function judgeAccuracy(
           parts: [{
             text: `You are fact-checking one LLM's description of a brand against that brand's actual website.
 
-LLM description: "${description}"
+<llm_description>
+${description.slice(0, 1000)}
+</llm_description>
 
-Actual website:
-Title: ${scraped.title}
-Description: ${scraped.description}
+<website_data>
+Title: ${scraped.title.slice(0, 200)}
+Description: ${scraped.description.slice(0, 500)}
 Content: ${scraped.content.slice(0, 1500)}
+</website_data>
 
 How factually accurate is the LLM description? Return JSON only:
 {
@@ -714,7 +803,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-real-ip") ??
       "unknown";
 
-    if (!checkRateLimit(ip)) {
+    if (!(await checkRateLimit(ip))) {
       return NextResponse.json(
         { error: "Rate limit exceeded. Max 3 audits per hour per IP." },
         { status: 429 }
@@ -722,11 +811,16 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { brand, category: userCategory, websiteUrl } = body;
+    const { brand: rawBrand, category: rawCategory, websiteUrl: rawUrl } = body;
 
-    if (!brand || !websiteUrl) {
+    if (!rawBrand || !rawUrl) {
       return NextResponse.json({ error: "Missing brand or website URL" }, { status: 400 });
     }
+
+    // Sanitize and clamp user inputs to reasonable lengths.
+    const brand = String(rawBrand).trim().slice(0, 200);
+    const websiteUrl = String(rawUrl).trim().slice(0, 2048);
+    const userCategory = rawCategory ? String(rawCategory).trim().slice(0, 200) : undefined;
 
     const scraped = await scrapeWebsite(websiteUrl);
     const meta: BrandMeta = scraped

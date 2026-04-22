@@ -229,8 +229,12 @@ function CitationList({ citations }: { citations: string[] }) {
           {citations.map((url, i) => {
             let host = url;
             try { host = new URL(url).hostname.replace(/^www\./, ""); } catch {}
+            // Only allow http/https hrefs to prevent javascript: or data: XSS.
+            let safeProtocol: string | undefined;
+            try { safeProtocol = new URL(url).protocol; } catch {}
+            const safeHref = safeProtocol === "http:" || safeProtocol === "https:" ? url : "#";
             return (
-              <a key={i} href={url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#3b82f6", textDecoration: "none", fontFamily: "'Space Mono', monospace" }} title={url}>
+              <a key={i} href={safeHref} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#3b82f6", textDecoration: "none", fontFamily: "'Space Mono', monospace" }} title={url}>
                 {host}
               </a>
             );

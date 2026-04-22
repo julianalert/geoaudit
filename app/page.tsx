@@ -95,7 +95,7 @@ export default function Home() {
         </div>
 
         <h2 className="fade" style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(32px, 5vw, 54px)", fontWeight: 800, letterSpacing: "-1.5px", color: "#0f172a", lineHeight: 1.05, marginBottom: 18 }}>
-          IS YOUR BRAND <span style={{ color: "#3b82f6" }}>SHOWING UP</span><br />IN AI ANSWERS?
+          Is your brand <span style={{ color: "#3b82f6" }}>showing up</span><br />in AI answers?
         </h2>
 
         <p className="fade" style={{ fontSize: 16, color: "#475569", lineHeight: 1.6, maxWidth: 700, marginBottom: 34 }}>

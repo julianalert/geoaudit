@@ -218,10 +218,13 @@ async function generatePositioningBrief(
       max_tokens: 2500,
       messages: [{
         role: "user",
-        content: `You are a positioning strategist fixing how "${brand}" shows up in AI answers.
+        content: `You are a positioning strategist fixing how a brand shows up in AI answers.
 
-The brand (${category}): ${brand}
-Website: ${websiteUrl}
+<brand_context>
+Brand: ${brand.slice(0, 200)}
+Category: ${category.slice(0, 200)}
+Website: ${websiteUrl.slice(0, 2048)}
+</brand_context>
 
 How LLMs currently describe them:
 ${llmPositioning || "(no data)"}
@@ -234,7 +237,7 @@ Your job: produce a concrete positioning-fix brief ready to paste onto the site.
 
 Return JSON only:
 {
-  "llmUnderstanding": "one sentence summarizing how AI currently understands ${brand}",
+  "llmUnderstanding": "one sentence summarizing how AI currently understands the brand",
   "siteStatement": "one sentence summarizing what their site claims (inferred, since you can't access it)",
   "heroRewrite": "single punchy homepage hero headline + 1 subheadline, max 25 words total",
   "metaRewrite": "SEO meta description, 150-160 chars, primary keywords included",
@@ -287,7 +290,7 @@ async function generateOnlinePresence(
           },
           {
             role: "user",
-            content: `Research the online presence of "${brand}" (${websiteUrl}) in the "${category}" space.
+            content: `Research the online presence of "${brand.slice(0, 200)}" (${websiteUrl.slice(0, 2048)}) in the "${category.slice(0, 200)}" space.
 
 For each platform below, find what EXISTS today (not what you guess). Report specific URLs, review counts, post dates, follower counts when available.
 
@@ -295,9 +298,9 @@ Check:
 - Review platforms: G2, Capterra, TrustRadius, Product Hunt
 - Community: Reddit, Hacker News, Stack Overflow
 - Content/social: LinkedIn company page, YouTube channel, podcast appearances
-- Industry media: blogs, news, publications in the ${category} space
+- Industry media: blogs, news, publications in the ${category.slice(0, 200)} space
 
-${topCompetitors.length > 0 ? `Also identify the 3 highest-leverage platforms where these competitors ARE listed but "${brand}" is NOT: ${topCompetitors.join(", ")}.` : ""}
+${topCompetitors.length > 0 ? `Also identify the 3 highest-leverage platforms where these competitors ARE listed but "${brand.slice(0, 200)}" is NOT: ${topCompetitors.map((c) => c.slice(0, 100)).join(", ")}.` : ""}
 
 Return JSON only:
 {
