@@ -20,11 +20,13 @@ export async function generateMetadata(
     ? data.overall_verdict
     : "In Progress";
 
-  const title = `${data.brand} LLM Visibility Audit — ${verdictText}`;
+  const title = `${data.brand} LLM Visibility Audit - ${verdictText}`;
   const description = data.overall_score > 0
-    ? `${data.brand} scored ${data.overall_score}/100 on the GEO Audit LLM visibility test across GPT-4o, Perplexity, Claude, and Gemini. See how AI models know, describe, and recommend this brand.`
-    : `LLM visibility audit for ${data.brand} in the ${data.category} space. See awareness, positioning, and recommendation scores across 4 AI models.`;
+    ? `${data.brand} scored ${data.overall_score}/100 on the GEO Audit LLM visibility test across GPT-4o, Claude, and Gemini. See exactly how AI models describe and recommend this brand - no context was fed to the models.`
+    : `LLM visibility audit for ${data.brand} in the ${data.category} space. See awareness, positioning, and recommendation scores across 3 AI models.`;
 
+  // Dynamic OG image - generated per audit with the score rendered in.
+  // (Next will auto-route to opengraph-image.tsx in the same folder.)
   return {
     ...base,
     title,
@@ -33,13 +35,11 @@ export async function generateMetadata(
       title,
       description,
       type: "website",
-      images: [{ url: "/images/thumbnail.png" }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: ["/images/thumbnail.png"],
     },
   };
 }

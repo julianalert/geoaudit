@@ -7,6 +7,10 @@ export interface AwarenessModelResult {
   description: string | null;
   scores?: { recognition: number; accuracy: number; detail: number; confidence: number };
   citations?: string[];
+  /** Post-hoc accuracy grade from judge comparing LLM description to scraped site. Null if judge didn't run. */
+  accuracyScore?: number | null;
+  /** Specific factual claims that contradicted the site. */
+  falseClaims?: string[];
 }
 
 export interface PositioningModelResult {
@@ -19,12 +23,25 @@ export interface PositioningModelResult {
   note: string;
 }
 
+export type RecommendationQueryType = "category" | "alternatives" | "use-case";
+
+export interface RecommendationModelQueryResult {
+  type: RecommendationQueryType;
+  query: string;
+  rank: number | null;
+  listed: boolean;
+  aboveYou: string[];
+  fullList: string[];
+  score?: number;
+}
+
 export interface RecommendationModelResult {
   model: string;
   rank: number | null;
   listed: boolean;
   aboveYou: string[];
   fullList: string[];
+  queries?: RecommendationModelQueryResult[];
 }
 
 export interface CompetitiveModelResult {
@@ -49,12 +66,16 @@ export interface OnlinePresenceSource {
 export interface OnlinePresenceData {
   sources: OnlinePresenceSource[];
   insight: string;
+  competitorGaps?: Array<{ platform: string; competitors: string[]; suggestion: string }>;
 }
 
 export interface RoadmapAction {
   action: string;
   impact: "High" | "Medium" | "Low";
   category: string;
+  where?: string;
+  template?: string;
+  scoreImpact?: string;
 }
 
 export interface RoadmapWeek {
@@ -67,6 +88,40 @@ export interface RoadmapData {
   insight: string;
 }
 
+export interface OpportunityCalculator {
+  monthlyCategoryQueries: number;
+  currentCaptureRate: number;
+  estimatedMonthlyLoss: number;
+  assumedAvgDealValue: number;
+  note: string;
+}
+
+export interface PositioningBrief {
+  llmUnderstanding: string;
+  siteStatement: string;
+  heroRewrite: string;
+  metaRewrite: string;
+  aboutRewrite: string;
+  jsonLd: string;
+}
+
+export interface ContentBrief {
+  title: string;
+  targetQuery: string;
+  outline: string[];
+  format: string;
+}
+
+export interface ContentGapMap {
+  briefs: ContentBrief[];
+  insight: string;
+}
+
+export interface DisagreementFlag {
+  stddev: number;
+  flagged: boolean;
+}
+
 export interface AuditResult {
   brand: string;
   category: string;
@@ -74,6 +129,7 @@ export interface AuditResult {
   overallScore: number;
   overallVerdict: string;
   overallSub: string;
+  meta?: { topCompetitor: string | null; icpPhrase: string | null };
   quadrant: {
     awarenessScore: number;
     recommendationScore: number;
@@ -85,7 +141,11 @@ export interface AuditResult {
     label: string;
     color: string;
     modelResults: AwarenessModelResult[];
+    disagreement?: DisagreementFlag;
+    /** @deprecated Use disagreement. Kept for old audits in DB. */
     consistencyBonus?: number;
+    hallucinationFlag?: boolean;
+    falseClaims?: Array<{ model: string; claim: string }>;
     insight: string;
     accuracyScore?: number;
     accuracyFlag?: string;
@@ -95,6 +155,8 @@ export interface AuditResult {
     label: string;
     color: string;
     modelResults: PositioningModelResult[];
+    disagreement?: DisagreementFlag;
+    /** @deprecated */
     consistencyBonus?: number;
     insight: string;
   };
@@ -102,9 +164,13 @@ export interface AuditResult {
     score: number;
     label: string;
     color: string;
-    promptUsed: string;
+    /** @deprecated single-prompt version. Use queriesUsed. */
+    promptUsed?: string;
+    queriesUsed?: Array<{ type: RecommendationQueryType; query: string }>;
     modelResults: RecommendationModelResult[];
     shareOfVoice: Array<{ name: string; pct: number }>;
+    disagreement?: DisagreementFlag;
+    /** @deprecated */
     consistencyBonus?: number;
     insight: string;
   };
@@ -117,6 +183,8 @@ export interface AuditResult {
     losses: string[];
     sentimentPerModel: CompetitiveModelResult[];
     overallSentiment: string;
+    disagreement?: DisagreementFlag;
+    /** @deprecated */
     consistencyBonus?: number;
     insight: string;
   };
@@ -125,6 +193,9 @@ export interface AuditResult {
   /** @deprecated use onlinePresence */
   sourceAttribution?: OnlinePresenceData | null;
   roadmap?: RoadmapData | null;
+  opportunityCalculator?: OpportunityCalculator | null;
+  positioningBrief?: PositioningBrief | null;
+  contentGapMap?: ContentGapMap | null;
 }
 
 export interface ScoreHistoryEntry {

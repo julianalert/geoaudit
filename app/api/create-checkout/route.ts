@@ -46,10 +46,10 @@ export async function POST(req: NextRequest) {
       {
         price_data: {
           currency: "usd",
-          unit_amount: 100, // $1.00
+          unit_amount: 3900, // $39.00 - AI Visibility Action Kit
           product_data: {
-            name: "GEO Audit Full Report",
-            description: `Full LLM visibility report for ${audit.brand} — recommendation rank, competitive context, source attribution & 30-day fix roadmap.`,
+            name: `AI Visibility Action Kit - ${audit.brand}`,
+            description: `Five plain-English deliverables for ${audit.brand}: how much money you're losing to competitors each month, new website copy AI will understand, the sites AI reads to learn about you, 8 pages you should write next, and a 30-day plan with copy-paste templates.`,
           },
         },
         quantity: 1,
