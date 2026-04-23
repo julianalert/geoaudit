@@ -511,8 +511,11 @@ ${RECOMMENDATION_JSON_SHAPE}`;
 function buildCompetitivePrompt(brand: string, categoryBase: string): string {
   return `Compare "${brand}" to its top competitors in the ${categoryBase} space. What does ${brand} do better? Where do competitors beat ${brand}?
 
+IMPORTANT: If you don't recognize "${brand}" or have very little knowledge about it, set brand_known to false and all numeric scores to 0. Do NOT fabricate or guess a competitive comparison for brands you don't know.
+
 Respond with JSON:
 {
+  "brand_known": true/false,
   "wins": ["specific advantage 1", "specific advantage 2", "specific advantage 3"],
   "losses": ["specific weakness 1", "specific weakness 2", "specific weakness 3"],
   "sentiment": "positive" | "neutral" | "negative",
@@ -522,6 +525,7 @@ Respond with JSON:
   "competitive_awareness": 0-100
 }
 
+brand_known: false if you don't recognize this brand - in that case set all numeric scores to 0 and wins/losses to empty arrays.
 sentiment_score: 0 = very negative view, 50 = neutral, 100 = very favorable.
 win_specificity: 0 = can't name anything specific, 50 = generic wins, 100 = highly specific and accurate advantages.
 competitive_awareness: 0 = don't know this competitive landscape, 50 = basic understanding, 100 = deep knowledge.`;
@@ -569,6 +573,7 @@ function scoreRecommendation(data: any): number {
 
 function scoreCompetitive(data: any): number {
   if (!data) return 0;
+  if (data.brand_known === false) return 0;
   const hasRealData = (data.sentiment_score != null && data.sentiment_score > 0)
     || (data.wins && data.wins.length > 0)
     || (data.losses && data.losses.length > 0);
