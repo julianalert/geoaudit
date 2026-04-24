@@ -1111,6 +1111,17 @@ export default function AuditPage() {
     () => (searchParams.get("payment") as "success" | "cancelled" | null)
   );
 
+  useEffect(() => {
+    if (paymentBanner !== "success") return;
+    if (typeof window === "undefined" || !(window as any).gtag) return;
+    (window as any).gtag("event", "conversion", {
+      send_to: "AW-17912302186/xJ1TCN7O_qEcEOqUoN1C",
+      value: 39.00,
+      currency: "USD",
+      transaction_id: auditId,
+    });
+  }, [paymentBanner]);
+
   const fetchAudit = useCallback(async () => {
     try {
       const res = await fetch(`/api/audit-status?id=${auditId}`);

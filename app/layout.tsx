@@ -35,6 +35,14 @@ export default function RootLayout({
         />
         {/* 100% privacy-first analytics */}
         <script async src="https://scripts.simpleanalyticscdn.com/latest.js" />
+        {/* Google Ads global site tag */}
+        <script async src="https://www.googletagmanager.com/gtag/js?id=AW-17912302186" />
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'AW-17912302186');
+        `}} />
       </head>
       <body
         style={{
