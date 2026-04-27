@@ -201,7 +201,7 @@ function LockedSection({ description, onUnlock, checkingOut, estimatedLoss }: {
         onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px #fbbf2450"; } }}
         onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
       >
-        {checkingOut ? "REDIRECTING…" : "UNLOCK THE ACTION KIT - $39 →"}
+        {checkingOut ? "REDIRECTING…" : "UNLOCK THE ACTION KIT - $17 →"}
       </button>
       <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "'Space Mono', monospace", letterSpacing: "0.05em" }}>
         One-time payment · Instant access · No account needed
@@ -740,7 +740,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId, isPartial, scoreHi
           <div style={{ position: "relative" }}>
             <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#fbbf24", marginBottom: 10 }}>▸ YOU KNOW YOUR SCORE. NOW FIX IT.</div>
             <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(22px, 3vw, 28px)", fontWeight: 800, color: "#0f172a", lineHeight: 1.15, marginBottom: 10 }}>
-              The <span style={{ color: "#fbbf24" }}>$39 Action Kit</span> tells you exactly what to change.
+              The <span style={{ color: "#fbbf24" }}>$17 Action Kit</span> tells you exactly what to change.
             </div>
             <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, margin: "0 0 20px", maxWidth: 600 }}>
               Five things, in plain English: how much money you&apos;re losing every month, new copy for your website, where AI gets its info about you, which pages to write next, and a 30-day plan you can actually follow.
@@ -769,7 +769,7 @@ function AuditResultsView({ d, websiteUrl, unlocked, auditId, isPartial, scoreHi
               onMouseEnter={(e) => { if (!checkingOut) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 28px #fbbf2450"; } }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
             >
-              {checkingOut ? "REDIRECTING…" : "GET THE ACTION KIT - $39 →"}
+              {checkingOut ? "REDIRECTING…" : "GET THE ACTION KIT - $17 →"}
             </button>
             <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 10, fontFamily: "'Space Mono', monospace", letterSpacing: "0.05em" }}>
               One-time payment · Instant access · No account needed
@@ -1116,7 +1116,7 @@ export default function AuditPage() {
     if (typeof window === "undefined" || !(window as any).gtag) return;
     (window as any).gtag("event", "conversion", {
       send_to: "AW-17912302186/xJ1TCN7O_qEcEOqUoN1C",
-      value: 39.00,
+      value: 17.00,
       currency: "USD",
       transaction_id: auditId,
     });

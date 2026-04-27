@@ -1,6 +1,6 @@
 // ── Premium "Action Kit" Content Generation ──────────────────
 // Runs AFTER the free audit is complete, triggered by Stripe webhook
-// (or admin unlock). Generates the five pieces that justify the $39
+// (or admin unlock). Generates the five pieces that justify the $17
 // price tag: Opportunity Calculator, Positioning Brief, Citation Source
 // Map, Content Gap Map, and the detailed 30-Day Action Plan.
 //

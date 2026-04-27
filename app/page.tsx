@@ -225,12 +225,12 @@ export default function Home() {
           <div style={{ padding: "32px 32px", background: "linear-gradient(135deg, #ffffff 0%, #fffbeb 100%)", border: "1px solid #fbbf2440", borderRadius: 12, position: "relative", overflow: "hidden" }}>
             <div style={{ position: "absolute", top: -40, right: -40, width: 200, height: 200, borderRadius: "50%", background: "radial-gradient(circle, #fbbf2418 0%, transparent 70%)", pointerEvents: "none" }} />
             <div style={{ position: "relative" }}>
-              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#fbbf24", marginBottom: 10 }}>UPGRADE · THE $39 ACTION KIT</div>
+              <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, letterSpacing: "0.2em", color: "#fbbf24", marginBottom: 10 }}>UPGRADE · THE $17 ACTION KIT</div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
                 <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: "clamp(22px, 3vw, 30px)", fontWeight: 800, color: "#0f172a", lineHeight: 1.15, margin: 0 }}>
                   Go from a score to an actual fix.
                 </h3>
-                <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: "#fbbf24" }}>$39</div>
+                <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 20, fontWeight: 700, color: "#fbbf24" }}>$17</div>
               </div>
               <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6, marginBottom: 22, maxWidth: 700 }}>
                 The free audit tells you what&apos;s broken. The Action Kit tells you <em>exactly</em> what to change, in plain English, with text you can paste straight onto your site.
@@ -268,8 +268,8 @@ export default function Home() {
               { q: "Why don't you feed my site into the audit LLMs?", a: "Because then we'd be measuring what they can LEARN from context, not what they already KNOW. The whole point is to see what your buyers see when they ask ChatGPT about you - with no hint of who you are. It's uncomfortable, and that's the point." },
               { q: "Which models do you test?", a: "GPT-4o (OpenAI), Claude (Anthropic), and Gemini 2.5 Flash (Google). Perplexity is deliberately excluded from the main audit because it searches the web in real time - it would always find something." },
               { q: "How accurate are the scores?", a: "Each model answers the same prompt in JSON-mode, and we grade the responses. Descriptions are fact-checked against your actual site by an independent judge model. Hallucinations drop your awareness score automatically." },
-              { q: "What's the difference between the free audit and the $39 Action Kit?", a: "The free audit tells you what's broken: your score, where you rank against competitors, what AI gets wrong about you. The Action Kit tells you what to do about it, in plain English: how much money you're losing, new website copy you can paste, the actual sites AI reads to learn about you, 8 pages you should write next, and a 30-day plan with copy-paste templates." },
-              { q: "Is this a subscription?", a: "No. $39 one-time unlocks the full report for that brand. You can re-run a free audit any time." },
+              { q: "What's the difference between the free audit and the $17 Action Kit?", a: "The free audit tells you what's broken: your score, where you rank against competitors, what AI gets wrong about you. The Action Kit tells you what to do about it, in plain English: how much money you're losing, new website copy you can paste, the actual sites AI reads to learn about you, 8 pages you should write next, and a 30-day plan with copy-paste templates." },
+              { q: "Is this a subscription?", a: "No. $17 one-time unlocks the full report for that brand. You can re-run a free audit any time." },
               { q: "Can I audit a competitor?", a: "Yes - enter any brand name and URL. The audit runs on the brand name alone, so the URL just helps with category detection and fact-checking. The result shows you exactly what AI thinks of them." },
             ].map((item, i) => {
               const open = openFaq === i;
